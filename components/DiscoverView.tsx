@@ -7,6 +7,7 @@ import {
   answersByMatchFromRows,
   isOtherProfileUnlocked,
   toDiscoverProfile,
+  type DiscoverProfile,
   type RichUserRow,
 } from "@/lib/profileVisibility"
 

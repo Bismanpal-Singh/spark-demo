@@ -13,8 +13,7 @@ type UserProfile = {
   bio: string | null
   avatar_url: string | null
   city: string | null
-  // Optional: interests not in minimal schema; show from bio keywords as a fallback.
-  interests?: string[]
+  preferences?: string[] | null
 }
 
 const interestFallback = (bio: string | null) => {
@@ -46,7 +45,7 @@ export function ProfileView({ userId }: { userId: string }) {
       try {
         const { data, error: qErr } = await supabase
           .from("users")
-          .select("id,display_name,age,bio,avatar_url,city")
+          .select("id,display_name,age,bio,avatar_url,city,preferences")
           .eq("id", userId)
           .single()
         if (qErr) throw qErr
@@ -62,7 +61,10 @@ export function ProfileView({ userId }: { userId: string }) {
     void load()
   }, [userId])
 
-  const interests = interestFallback(profile?.bio ?? null)
+  const interests =
+    (profile?.preferences ?? []).filter(Boolean).length > 0
+      ? (profile?.preferences ?? []).filter(Boolean)
+      : interestFallback(profile?.bio ?? null)
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">

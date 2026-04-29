@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Flame, Heart, Lock, MapPin, Sparkles, X } from "lucide-react"
 import { supabase } from "@/src/supabase"
 import { getQuestionForMatch } from "@/lib/questions"
-import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "../lib/sparkRules"
+import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "@/lib/sparkRules"
 import { SparkReveal, type SparkRevealProfile } from "@/components/SparkReveal"
 import { incomingLikeLockedPreview, type RichUserRow } from "@/lib/profileVisibility"
 

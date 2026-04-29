@@ -1,4 +1,20 @@
-import type { DiscoverProfile } from "@/components/ProfileCard"
+/** Discover swipe card model (locked vs full profile). */
+export type DiscoverProfile = {
+  id: string
+  name: string
+  age: number
+  city: string
+  photos: string[]
+  previewBio: string
+  previewInterests: string[]
+  fullBio: string
+  allInterests: string[]
+  lookingFor: string
+  funFact: string
+  unlocked: boolean
+  /** When locked: extra photos not shown on the card hero. */
+  lockedExtraPhotoCount?: number
+}
 
 /** Max chars of bio shown on Discover cards when profile is locked. */
 export const DISCOVER_PREVIEW_BIO_MAX = 95

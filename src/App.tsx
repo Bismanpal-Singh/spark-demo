@@ -7,6 +7,12 @@ import { ProfileView } from "@/components/ProfileView"
 import { LoginView } from "@/components/LoginView"
 import { supabase } from "@/src/supabase"
 
+type SparkAnswerUserIdRow = { user_id: string }
+
+function isResetMatchRpcRow(value: unknown): value is { ok: boolean } {
+  return typeof value === "object" && value !== null && "ok" in value
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("discover")
   const [userId, setUserId] = useState<string | null>(null)
@@ -81,7 +87,9 @@ export default function App() {
               .select("user_id")
               .eq("match_id", matchId)
 
-            const answered = new Set((answers ?? []).map((a) => (a as any).user_id))
+            const answered = new Set(
+              ((answers ?? []) as SparkAnswerUserIdRow[]).map((a) => a.user_id),
+            )
             const bothAnswered = answered.has(user_a) && answered.has(user_b)
 
             if (!bothAnswered) return
@@ -184,7 +192,7 @@ export default function App() {
         })
         if (error) throw error
         const parsed = Array.isArray(data) ? (data[0] ?? null) : data
-        if (parsed && typeof parsed === "object" && "ok" in parsed && (parsed as any).ok !== true) {
+        if (isResetMatchRpcRow(parsed) && parsed.ok !== true) {
           throw new Error("Reset failed")
         }
       }

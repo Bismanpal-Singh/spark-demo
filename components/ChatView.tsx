@@ -49,18 +49,6 @@ export function ChatView({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(initialMatchId ?? null)
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<SparkedChatRow[]>([])
-  const [seenSparkRevealIds, setSeenSparkRevealIds] = useState<Set<string>>(new Set())
-  const sparkRevealSeenKey = useMemo(() => `spark-reveal-seen:${userId}`, [userId])
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(sparkRevealSeenKey)
-      const parsed = raw ? (JSON.parse(raw) as string[]) : []
-      setSeenSparkRevealIds(new Set(parsed))
-    } catch {
-      setSeenSparkRevealIds(new Set())
-    }
-  }, [sparkRevealSeenKey])
 
   useEffect(() => {
     if (initialMatchId) setSelectedMatchId(initialMatchId)
@@ -152,7 +140,7 @@ export function ChatView({
   useEffect(() => {
     void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, seenSparkRevealIds, selectedMatchId])
+  }, [userId, selectedMatchId])
 
   const selected = useMemo(() => {
     if (!selectedMatchId) return null

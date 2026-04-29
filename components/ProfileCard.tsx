@@ -3,23 +3,9 @@
 import { useRef, useCallback } from "react"
 import { MapPin, Lock, Heart, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import type { DiscoverProfile } from "@/lib/profileVisibility"
 
-export type DiscoverProfile = {
-  id: string
-  name: string
-  age: number
-  city: string
-  photos: string[]
-  previewBio: string
-  previewInterests: string[]
-  fullBio: string
-  allInterests: string[]
-  lookingFor: string
-  funFact: string
-  unlocked: boolean
-  /** When locked: extra photos not shown on the card hero. */
-  lockedExtraPhotoCount?: number
-}
+export type { DiscoverProfile }
 
 interface ProfileCardProps {
   profile: DiscoverProfile
