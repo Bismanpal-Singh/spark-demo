@@ -5,6 +5,7 @@ import { Flame, Sparkles, X } from "lucide-react"
 import { supabase } from "@/src/supabase"
 import { getTodaysQuestion } from "@/lib/questions"
 import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "../lib/sparkRules"
+import { SparkReveal, type SparkRevealProfile } from "@/components/SparkReveal"
 
 type MatchStatus = "pending" | "sparked" | "dating"
 
@@ -13,13 +14,13 @@ type MatchRow = {
   user_a: string
   user_b: string
   status: MatchStatus
-  // Derive “who you’re seeing” based on viewer; we keep it simple.
 }
 
 type UserRow = {
   id: string
   display_name: string | null
   avatar_url: string | null
+  bio?: string | null
 }
 
 type SparkAnswerRow = {
@@ -69,6 +70,7 @@ export function MatchesView({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<MatchesResponse | null>(null)
+  const [currentUserName, setCurrentUserName] = useState("You")
 
   const [sparkOpen, setSparkOpen] = useState(false)
   const [sparkMatchId, setSparkMatchId] = useState<string | null>(null)
@@ -78,6 +80,8 @@ export function MatchesView({
   const [answer, setAnswer] = useState("")
   const [sparkLoading, setSparkLoading] = useState(false)
   const [sparkError, setSparkError] = useState<string | null>(null)
+  const [sparkRevealProfile, setSparkRevealProfile] = useState<SparkRevealProfile | null>(null)
+  const [sparkRevealMatchId, setSparkRevealMatchId] = useState<string | null>(null)
 
   const canSubmit = useMemo(() => {
     const len = answer.trim().length
@@ -89,6 +93,13 @@ export function MatchesView({
     setError(null)
 
     try {
+      const { data: me } = await supabase
+        .from("users")
+        .select("display_name")
+        .eq("id", userId)
+        .maybeSingle()
+      if (me?.display_name) setCurrentUserName(me.display_name)
+
       // 1) Load matches for this user.
       const { data: matches, error: matchesError } = await supabase
         .from("matches")
@@ -117,7 +128,7 @@ export function MatchesView({
 
       const { data: users } = await supabase
         .from("users")
-        .select("id,display_name,avatar_url")
+        .select("id,display_name,avatar_url,bio")
         .in("id", otherUserIds)
 
       const userById = new Map<string, UserRow>()
@@ -288,7 +299,21 @@ export function MatchesView({
       const otherId = getOtherUserId(matchRow as any, userId)
 
       if (answerUserIds.has(userId) && answerUserIds.has(otherId)) {
-        onGoToChat?.(sparkMatchId)
+        // Pull latest profile details for spark reveal moment.
+        const { data: otherUser } = await supabase
+          .from("users")
+          .select("display_name,avatar_url,bio")
+          .eq("id", otherId)
+          .maybeSingle()
+
+        closeSparkPrompt()
+        setSparkRevealMatchId(sparkMatchId)
+        setSparkRevealProfile({
+          name: otherUser?.display_name ?? "Your match",
+          bio: otherUser?.bio ?? "Your connection is unlocked. Start the conversation.",
+          photos: otherUser?.avatar_url ? [otherUser.avatar_url] : [],
+        })
+        return
       }
 
       closeSparkPrompt()
@@ -551,6 +576,19 @@ export function MatchesView({
             )}
           </div>
         </div>
+      )}
+
+      {sparkRevealProfile && sparkRevealMatchId && (
+        <SparkReveal
+          currentUserName={currentUserName}
+          matchedProfile={sparkRevealProfile}
+          onComplete={() => {
+            const matchId = sparkRevealMatchId
+            setSparkRevealProfile(null)
+            setSparkRevealMatchId(null)
+            onGoToChat?.(matchId)
+          }}
+        />
       )}
     </div>
   )

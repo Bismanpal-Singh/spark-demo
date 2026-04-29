@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 
 export type SparkRevealProfile = {
@@ -10,118 +10,113 @@ export type SparkRevealProfile = {
 }
 
 export function SparkReveal({
-  profile,
+  currentUserName,
+  matchedProfile,
   onComplete,
 }: {
-  profile: SparkRevealProfile
+  currentUserName: string
+  matchedProfile: SparkRevealProfile
   onComplete: () => void
 }) {
-  const hasPhoto = Boolean(profile.photos?.[0])
-  const photoUrl = profile.photos?.[0]
-
-  // The animation timing is intentionally deterministic and calm.
-  const totalMs = 2700
+  const [photoFailed, setPhotoFailed] = useState(false)
+  const hasPhoto = Boolean(matchedProfile.photos?.[0]) && !photoFailed
+  const photoUrl = matchedProfile.photos?.[0]
   const calledRef = useRef(false)
-
-  const backgroundTarget = useMemo(() => "var(--background)", [])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (calledRef.current) return
       calledRef.current = true
       onComplete()
-    }, totalMs)
-
+    }, 3000)
     return () => window.clearTimeout(t)
   }, [onComplete])
 
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
-      initial={{ backgroundColor: "#0a0a0a" }}
-      animate={{ backgroundColor: backgroundTarget }}
-      transition={{
-        // Step 2: transition after the pulse (we align this with the pulse end at ~800ms).
-        duration: 0.4,
-        delay: 0.8,
-        ease: "easeInOut",
-      }}
+      className="fixed inset-0 z-[100] flex items-center justify-center"
+      initial={{ backgroundColor: "#080808" }}
+      animate={{ backgroundColor: "var(--background)" }}
+      transition={{ duration: 0.6, delay: 1.4, ease: "easeInOut" }}
     >
-      {/* Single minimal flame icon */}
-      <motion.div
-        className="flex items-center justify-center"
-        initial={{ scale: 1 }}
-        animate={{ scale: [1, 1.15, 1] }}
-        transition={{ duration: 0.8, ease: "easeInOut" }}
-      >
-        <FlameIcon />
-      </motion.div>
+      <div className="mx-auto flex w-full max-w-[380px] flex-col items-center px-6 text-center">
 
-      {/* Revealed content */}
-      <div className="mt-8 flex w-full flex-col items-center justify-center px-6 text-center">
+        {/* Flame */}
+        <motion.svg
+          width="20"
+          height="24"
+          viewBox="0 0 20 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeInOut" }}
+        >
+          <path
+            d="M10 0C10 0 10 6 6 9C2 12 2 15 2 17C2 20.866 5.582 24 10 24C14.418 24 18 20.866 18 17C18 15 18 12 14 9C10 6 10 0 10 0Z"
+            fill="#fb923c"
+            opacity="0.9"
+          />
+          <path
+            d="M10 10C10 10 10 13.5 8 15C6 16.5 6 18 6 18.5C6 20.433 7.79 22 10 22C12.21 22 14 20.433 14 18.5C14 18 14 16.5 12 15C10 13.5 10 10 10 10Z"
+            fill="#fed7aa"
+            opacity="0.6"
+          />
+        </motion.svg>
+
+        {/* Both names */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.3, ease: "easeInOut" }}
+          className="mt-4 flex items-center gap-2"
+        >
+          <span className="text-[15px] font-medium text-white">
+            {currentUserName}
+          </span>
+          <span className="text-[11px] text-amber-400" style={{ letterSpacing: "0.04em" }}>
+            &amp;
+          </span>
+          <span className="text-[15px] font-medium text-white">
+            {matchedProfile.name}
+          </span>
+        </motion.div>
+
+        {/* Label */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.5, ease: "easeInOut" }}
+          className="mt-1 text-[11px] font-medium text-amber-400"
+          style={{ letterSpacing: "0.04em" }}
+        >
+          it's a spark
+        </motion.p>
+
         {/* Photo */}
-        <motion.img
-          src={hasPhoto ? photoUrl : undefined}
-          alt={profile.name}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.8 }}
-          className="max-h-[42vh] w-[320px] max-w-[90vw] rounded-[28px] object-cover shadow-2xl"
-        />
+        {hasPhoto && (
+          <motion.img
+            src={photoUrl}
+            alt={matchedProfile.name}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.9, ease: "easeInOut" }}
+            className="mt-7 max-h-[42vh] w-full rounded-[24px] object-cover shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+            onError={() => setPhotoFailed(true)}
+          />
+        )}
 
-        {/* Name: 150ms after photo appears */}
-        <motion.h2
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.35, delay: 0.95 }}
-          className="mt-4 text-[24px] font-medium leading-tight text-white"
-        >
-          {profile.name}
-        </motion.h2>
-
-        {/* Bio: 150ms after name appears */}
+        {/* One clean line only (avoid repeating profile name/bio here). */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.35, delay: 1.1 }}
-          className="mt-2 text-[14px] font-normal leading-snug text-[#888]"
+          transition={{ duration: 0.4, delay: hasPhoto ? 1.2 : 0.9, ease: "easeInOut" }}
+          className="mt-4 text-[14px] leading-relaxed text-white/55"
         >
-          {profile.bio}
+          Conversation unlocked. Say hi and keep the spark going.
         </motion.p>
 
-        {/* Copy line: 300ms after bio appears */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.25, delay: 1.4 }}
-          className="mt-4 text-[13px] font-medium uppercase tracking-[0.1em] text-[#F97316]"
-        >
-          Your spark is lit
-        </motion.p>
       </div>
     </motion.div>
   )
 }
-
-function FlameIcon() {
-  // Thin, elegant single teardrop flame shape.
-  return (
-    <svg
-      width="32"
-      height="32"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <path
-        d="M12 2.5C9.9 6 6 10.1 6 14a6 6 0 0 0 12 0c0-3.9-3.9-8-6-11.5Z"
-        stroke="#F97316"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
