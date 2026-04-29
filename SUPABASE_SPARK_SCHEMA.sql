@@ -83,6 +83,13 @@ create policy "matches_select_participants"
     user_a = auth.uid() OR user_b = auth.uid()
   );
 
+create policy "matches_insert_participants"
+  on public.matches
+  for insert
+  with check (
+    user_a = auth.uid() OR user_b = auth.uid()
+  );
+
 create policy "matches_update_participants"
   on public.matches
   for update

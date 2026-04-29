@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Flame, Heart, Sparkles, X } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { Flame, Heart, Lock, MapPin, Sparkles, X } from "lucide-react"
 import { supabase } from "@/src/supabase"
 import { getQuestionForMatch } from "@/lib/questions"
 import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "../lib/sparkRules"
@@ -9,17 +10,29 @@ import { SparkReveal, type SparkRevealProfile } from "@/components/SparkReveal"
 
 type MatchRow = { id: string; user_a: string; user_b: string; status: "pending" | "sparked" | "dating" }
 type LikeRow = { from_user_id: string; to_user_id: string; status: "pending" | "mutual" }
-type UserRow = { id: string; display_name: string | null; avatar_url: string | null; bio?: string | null }
+type UserRow = {
+  id: string
+  display_name: string | null
+  avatar_url: string | null
+  bio?: string | null
+  age?: number | null
+  city?: string | null
+  preferences?: string[] | null
+  gallery_urls?: string[] | null
+  looking_for?: string | null
+  fun_fact?: string | null
+}
 type SparkAnswerRow = { match_id: string; user_id: string; answer: string }
 
 type MatchesResponse = {
-  incoming_likes: Array<{ other: UserRow }>
+  incoming_likes: Array<{ other: UserRow; fromUserId: string }>
   spark_pending: Array<{ match: MatchRow; other: UserRow }>
   waiting_on_them: Array<{ other: UserRow; stage: "like" | "spark" }>
   sparked: Array<{ match: MatchRow; other: UserRow; bothAnswered: boolean }>
 }
 
 const getOtherUserId = (m: MatchRow, userId: string) => (m.user_a === userId ? m.user_b : m.user_a)
+const truncate = (text: string, max = 120) => (text.length <= max ? text : `${text.slice(0, max - 1)}...`)
 
 export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoToChat?: (matchId: string) => void }) {
   const [loading, setLoading] = useState(true)
@@ -35,6 +48,8 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   const [sparkRevealProfile, setSparkRevealProfile] = useState<SparkRevealProfile | null>(null)
   const [sparkRevealMatchId, setSparkRevealMatchId] = useState<string | null>(null)
   const [seenSparkRevealIds, setSeenSparkRevealIds] = useState<Set<string>>(new Set())
+  const [incomingPreview, setIncomingPreview] = useState<UserRow | null>(null)
+  const [incomingActionLoading, setIncomingActionLoading] = useState<"accept" | "decline" | null>(null)
   const canSubmit = useMemo(() => answer.trim().length >= SPARK_MIN_CHARS && answer.trim().length <= SPARK_MAX_CHARS, [answer])
   const sparkRevealSeenKey = useMemo(() => `spark-reveal-seen:${userId}`, [userId])
 
@@ -81,7 +96,22 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
       const otherIds = new Set<string>()
       likeRows.forEach((l) => otherIds.add(l.from_user_id === userId ? l.to_user_id : l.from_user_id))
       matchRows.forEach((m) => otherIds.add(getOtherUserId(m, userId)))
-      const { data: users } = otherIds.size > 0 ? await supabase.from("users").select("id,display_name,avatar_url,bio").in("id", Array.from(otherIds)) : { data: [] as UserRow[] }
+      const usersResult =
+        otherIds.size > 0
+          ? await supabase
+              .from("users")
+              .select("id,display_name,avatar_url,bio,age,city,preferences,gallery_urls,looking_for,fun_fact")
+              .in("id", Array.from(otherIds))
+          : { data: [] as UserRow[], error: null }
+      const users =
+        usersResult.error && otherIds.size > 0
+          ? (
+              await supabase
+                .from("users")
+                .select("id,display_name,avatar_url,bio")
+                .in("id", Array.from(otherIds))
+            ).data
+          : usersResult.data
       const userById = new Map<string, UserRow>()
       ;((users ?? []) as UserRow[]).forEach((u) => userById.set(u.id, u))
 
@@ -91,9 +121,12 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
       likeRows.forEach((l) => {
         const otherId = l.from_user_id === userId ? l.to_user_id : l.from_user_id
         const other = userById.get(otherId)
-        if (!other || matchedUsers.has(otherId) || l.status !== "pending") return
-        if (l.to_user_id === userId) next.incoming_likes.push({ other })
-        else next.waiting_on_them.push({ other, stage: "like" })
+        if (!other || matchedUsers.has(otherId)) return
+        if (l.to_user_id === userId && (l.status === "pending" || l.status === "mutual")) {
+          next.incoming_likes.push({ other, fromUserId: l.from_user_id })
+        } else if (l.from_user_id === userId && l.status === "pending") {
+          next.waiting_on_them.push({ other, stage: "like" })
+        }
       })
 
       matchRows.forEach((m) => {
@@ -171,11 +204,83 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   }, [userId])
 
   const approveLike = async (otherUserId: string) => {
-    await supabase.from("likes").upsert({ from_user_id: userId, to_user_id: otherUserId, status: "mutual" }, { onConflict: "from_user_id,to_user_id" })
-    await supabase.from("likes").upsert({ from_user_id: otherUserId, to_user_id: userId, status: "mutual" }, { onConflict: "from_user_id,to_user_id" })
-    const { data: existing } = await supabase.from("matches").select("id").or(`and(user_a.eq.${userId},user_b.eq.${otherUserId}),and(user_a.eq.${otherUserId},user_b.eq.${userId})`).maybeSingle()
-    if (!existing) await supabase.from("matches").insert({ user_a: userId, user_b: otherUserId, status: "pending" })
-    await refresh()
+    setError(null)
+    setIncomingActionLoading("accept")
+    try {
+      const { data: existingRows, error: existingError } = await supabase
+        .from("matches")
+        .select("id")
+        .or(`and(user_a.eq.${userId},user_b.eq.${otherUserId}),and(user_a.eq.${otherUserId},user_b.eq.${userId})`)
+        .limit(1)
+      if (existingError) throw existingError
+
+      if (!existingRows || existingRows.length === 0) {
+        const { error: insertMatchError } = await supabase
+          .from("matches")
+          .insert({ user_a: userId, user_b: otherUserId, status: "pending" })
+        if (insertMatchError && (insertMatchError as { code?: string }).code !== "23505") {
+          throw insertMatchError
+        }
+      }
+
+      const { error: likeAError } = await supabase
+        .from("likes")
+        .upsert(
+          { from_user_id: userId, to_user_id: otherUserId, status: "mutual" },
+          { onConflict: "from_user_id,to_user_id" },
+        )
+      if (likeAError) throw likeAError
+
+      // Update incoming like only if present and visible by policy.
+      const { error: likeBError } = await supabase
+        .from("likes")
+        .update({ status: "mutual" })
+        .eq("from_user_id", otherUserId)
+        .eq("to_user_id", userId)
+      if (likeBError) {
+        // Don't fail the entire flow here; match row already exists and drives spark category.
+      }
+
+      setIncomingPreview(null)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to approve like")
+    } finally {
+      setIncomingActionLoading(null)
+    }
+  }
+
+  const declineLike = async (otherUserId: string) => {
+    setError(null)
+    setIncomingActionLoading("decline")
+    try {
+      const { error: deleteIncomingLikeError } = await supabase
+        .from("likes")
+        .delete()
+        .eq("from_user_id", otherUserId)
+        .eq("to_user_id", userId)
+      if (deleteIncomingLikeError) throw deleteIncomingLikeError
+
+      const { error: deleteOutgoingLikeError } = await supabase
+        .from("likes")
+        .delete()
+        .eq("from_user_id", userId)
+        .eq("to_user_id", otherUserId)
+      if (deleteOutgoingLikeError) throw deleteOutgoingLikeError
+
+      const { error: deleteMatchError } = await supabase
+        .from("matches")
+        .delete()
+        .or(`and(user_a.eq.${userId},user_b.eq.${otherUserId}),and(user_a.eq.${otherUserId},user_b.eq.${userId})`)
+      if (deleteMatchError) throw deleteMatchError
+
+      setIncomingPreview(null)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to decline like")
+    } finally {
+      setIncomingActionLoading(null)
+    }
   }
 
   const openSparkPrompt = async (matchId: string) => {
@@ -246,8 +351,20 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
               ) : (
                 data.incoming_likes.map((r) => (
                   <div key={r.other.id} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 last:mb-0">
-                    <span>{r.other.display_name ?? "Unknown"}</span>
-                    <button className="rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground" onClick={() => void approveLike(r.other.id)}>Approve</button>
+                    <button
+                      type="button"
+                      onClick={() => setIncomingPreview(r.other)}
+                      className="flex items-center gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-background/60"
+                    >
+                      <img src={r.other.avatar_url ?? ""} alt={r.other.display_name ?? "Profile"} className="h-9 w-9 rounded-full border border-border/60 object-cover" />
+                      <span>{r.other.display_name ?? "Unknown"}</span>
+                    </button>
+                    <button
+                      className="rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
+                      onClick={() => void approveLike(r.fromUserId)}
+                    >
+                      Approve
+                    </button>
                   </div>
                 ))
               )}
@@ -370,6 +487,97 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
           }}
         />
       )}
+
+      <AnimatePresence>
+        {incomingPreview && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="fixed inset-0 z-[85] bg-black/70 p-3 sm:p-5"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 22 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              className="mx-auto h-full w-full max-w-md overflow-hidden rounded-[30px] border border-white/10 bg-[#0d0d14] shadow-[0_30px_100px_rgba(0,0,0,0.55)]"
+            >
+              <div className="relative h-full w-full">
+                <img
+                  src={(incomingPreview.gallery_urls ?? []).find(Boolean) ?? incomingPreview.avatar_url ?? ""}
+                  alt={incomingPreview.display_name ?? "Profile"}
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
+                <button
+                  type="button"
+                  onClick={() => setIncomingPreview(null)}
+                  aria-label="Close"
+                  className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/30 p-1.5 text-white/80 backdrop-blur transition hover:bg-black/45"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <div className="absolute inset-x-0 bottom-0 p-4 pb-5 text-white">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/55">Liked you</div>
+                  <h2 className="mt-1 text-4xl font-semibold leading-none text-white">
+                    {incomingPreview.display_name ?? "Unknown"}
+                    {incomingPreview.age ? <span className="ml-2 text-white/65">{incomingPreview.age}</span> : null}
+                  </h2>
+                  {incomingPreview.city ? (
+                    <div className="mt-2 flex items-center gap-1.5 text-white/75">
+                      <MapPin className="h-3.5 w-3.5" />
+                      <span className="text-sm">{incomingPreview.city}</span>
+                    </div>
+                  ) : null}
+
+                  <p className="mt-2 text-base leading-relaxed text-white/92">
+                    {incomingPreview.bio?.trim() ? truncate(incomingPreview.bio, 115) : "No bio added yet."}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {(incomingPreview.preferences ?? []).slice(0, 3).map((tag) => (
+                      <span key={tag} className="rounded-full bg-white/15 px-2.5 py-1 text-xs text-white">
+                        {tag}
+                      </span>
+                    ))}
+                    {((incomingPreview.preferences ?? []).length || 0) > 3 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/65">
+                        <Lock className="h-3 w-3" />+{(incomingPreview.preferences ?? []).length - 3}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2">
+                    <Lock className="h-3.5 w-3.5 text-white/55" />
+                    <span className="text-xs text-white/65">Spark to unlock full profile</span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={incomingActionLoading !== null}
+                      onClick={() => void declineLike(incomingPreview.id)}
+                      className="rounded-xl border border-white/20 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-black/45 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {incomingActionLoading === "decline" ? "Declining..." : "Decline"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={incomingActionLoading !== null}
+                      onClick={() => void approveLike(incomingPreview.id)}
+                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {incomingActionLoading === "accept" ? "Accepting..." : "Accept"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

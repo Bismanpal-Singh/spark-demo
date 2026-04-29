@@ -121,12 +121,10 @@ export function ChatView({
           const bothAnswered = Boolean(a) && Boolean(b)
           if (!bothAnswered) return false
 
-          // Buffer: chat list should only show after this user has viewed SparkReveal.
-          // But always allow the currently targeted match through so post-reveal navigation
-          // can open chat immediately without waiting on localStorage sync timing.
+          // Show chat row as soon as spark is complete for both users.
+          // Keep selected-match passthrough for immediate post-flow navigation.
           if (selectedMatchId && m.id === selectedMatchId) return true
-          const seen = seenSparkRevealIds.has(m.id)
-          return seen
+          return true
         })
         .map((m) => {
           const otherId = getOtherUserId(m, userId)
