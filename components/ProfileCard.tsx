@@ -1,12 +1,26 @@
 "use client"
 
 import { useRef, useCallback } from "react"
-import { Profile } from "@/lib/mock-profiles"
 import { MapPin, Lock, Heart, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
+export type DiscoverProfile = {
+  id: string
+  name: string
+  age: number
+  city: string
+  photos: string[]
+  previewBio: string
+  previewInterests: string[]
+  fullBio: string
+  allInterests: string[]
+  lookingFor: string
+  funFact: string
+  unlocked: boolean
+}
+
 interface ProfileCardProps {
-  profile: Profile
+  profile: DiscoverProfile
   onSwipeLeft: () => void
   onSwipeRight: () => void
   isActive: boolean
@@ -182,36 +196,69 @@ export function ProfileCard({
             <span className="text-sm">{profile.city}</span>
           </div>
 
-          {/* Preview bio */}
-          <p className="mb-2.5 text-sm leading-relaxed text-white/90">
-            {profile.previewBio}
-          </p>
+          {!profile.unlocked ? (
+            <>
+              {/* Preview bio */}
+              <p className="mb-2.5 text-sm leading-relaxed text-white/90">
+                {profile.previewBio}
+              </p>
 
-          {/* Preview interests */}
-          <div className="mb-2.5 flex flex-wrap gap-1.5">
-            {profile.previewInterests.map((interest) => (
-              <Badge
-                key={interest}
-                variant="secondary"
-                className="bg-white/15 px-2 py-0.5 text-xs text-white"
-              >
-                {interest}
-              </Badge>
-            ))}
-            <Badge
-              variant="secondary"
-              className="bg-white/10 px-2 py-0.5 text-xs text-white/50"
-            >
-              <Lock className="mr-1 h-3 w-3" />
-              +{profile.allInterests.length - profile.previewInterests.length}
-            </Badge>
-          </div>
+              {/* Preview interests */}
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {profile.previewInterests.map((interest) => (
+                  <Badge
+                    key={interest}
+                    variant="secondary"
+                    className="bg-white/15 px-2 py-0.5 text-xs text-white"
+                  >
+                    {interest}
+                  </Badge>
+                ))}
+                {profile.allInterests.length > profile.previewInterests.length && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-white/10 px-2 py-0.5 text-xs text-white/50"
+                  >
+                    <Lock className="mr-1 h-3 w-3" />
+                    +{profile.allInterests.length - profile.previewInterests.length}
+                  </Badge>
+                )}
+              </div>
 
-          {/* Locked hint */}
-          <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2">
-            <Lock className="h-3.5 w-3.5 text-white/50" />
-            <span className="text-xs text-white/50">Spark to see full profile</span>
-          </div>
+              {/* Locked hint */}
+              <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2">
+                <Lock className="h-3.5 w-3.5 text-white/50" />
+                <span className="text-xs text-white/50">Spark to see full profile</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mb-2 text-sm leading-relaxed text-white/95">{profile.fullBio}</p>
+
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {profile.allInterests.map((interest) => (
+                  <Badge
+                    key={interest}
+                    variant="secondary"
+                    className="bg-emerald-300/20 px-2 py-0.5 text-xs text-emerald-50"
+                  >
+                    {interest}
+                  </Badge>
+                ))}
+              </div>
+
+              {profile.lookingFor && (
+                <p className="mb-1 text-xs text-white/70">
+                  <span className="font-semibold text-white/90">Looking for:</span> {profile.lookingFor}
+                </p>
+              )}
+              {profile.funFact && (
+                <p className="text-xs text-white/70">
+                  <span className="font-semibold text-white/90">Fun fact:</span> {profile.funFact}
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
