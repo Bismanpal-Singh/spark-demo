@@ -203,11 +203,28 @@ export function ChatConversation({
   const unmatch = async () => {
     setError(null)
     try {
-      const { error: delError } = await supabase.from("matches").delete().eq("id", match.id)
-      if (delError) throw delError
+      const { data, error: rpcError } = await supabase.rpc("reset_match_to_pending", {
+        p_match_id: match.id,
+      })
+      if (rpcError) throw rpcError
+      const raw = Array.isArray(data) ? (data[0] ?? null) : data
+      const result =
+        typeof raw === "string"
+          ? (() => {
+              try {
+                return JSON.parse(raw)
+              } catch {
+                return { ok: false, raw }
+              }
+            })()
+          : raw
+
+      if (!result || (result as any).ok !== true) {
+        throw new Error("Reset failed")
+      }
       onBack()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to unmatch")
+      setError(e instanceof Error ? e.message : "Failed to reset match")
     }
   }
 
@@ -362,7 +379,7 @@ export function ChatConversation({
                   onClick={() => void unmatch()}
                   className="rounded-2xl border border-rose-400/30 bg-rose-400/10 py-3 text-sm font-semibold text-rose-200 transition-colors hover:bg-rose-400/15"
                 >
-                  Unmatch
+                  Reset to pending
                 </button>
               </div>
 
