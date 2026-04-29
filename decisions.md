@@ -53,36 +53,27 @@
   - Avoids race conditions and unclear "both accepted" logic.
   - Makes transitions to friction task unlock deterministic.
 
-## D-006: Local Mock Backend for Match State (File-backed)
+## D-006: Supabase Backend for Match State
 - Date: 2026-04-28
-- Status: Accepted (MVP)
+- Status: Updated (Supabase migration)
 - Decision:
-  - Use a minimal file-backed JSON “DB” for persisted match state during the take-home demo instead of Supabase.
-  - Implement local API endpoints on the Vite dev server:
-    - `GET /api/me/matches` returns categorized matches.
-    - `POST /api/me/matches/:id/reply-spark` updates a match from `waiting_for_my_spark` to `sparked`.
-    - `POST /api/me/reset` resets the local DB for fast demos.
-  - Update `MatchesView` to fetch from the API and re-render UI based on real state transitions.
+  - Replace the file-backed mock backend and Vite middleware with Supabase as the source of truth.
+  - Supabase now stores:
+    - matches lifecycle (`pending` -> `sparked` -> `dating`)
+    - spark answers per match + user
+    - chat messages per match
 - Rationale:
-  - Keeps scope small while still demonstrating clean engineering (data boundary + API layer + persistence).
-  - Enables a credible “spark pending -> sparked” lifecycle without auth/real DB setup.
-- Risks:
-  - File-backed storage is not concurrency-safe (acceptable for a demo).
-  - No authorization/RLS (intentionally deferred for assignment scope).
+  - Removes demo-only edge cases and backend confusion.
+  - Enables realtime updates for spark answering + live chat.
 
-## D-008: Implement Spark Vertical Slice (Question + Answer + Unlock)
+## D-008: Implement Spark + Mutual Chat Unlock (Realtime)
 - Date: 2026-04-29
-- Status: In Progress / MVP
+- Status: In Progress
 - Decision:
-  - Keep the Spark prompt deterministic by using a local hardcoded question bank + a daily index picker (no DB for questions).
-  - Extend the local file-backed match state to include:
-    - `sparkQuestion`
-    - `myAnswer`
-    - `theirAnswer`
-  - Add API endpoints in the Vite dev server:
-    - `GET /api/me/matches/:id/spark-question`
-    - `POST /api/me/matches/:id/reply-spark` with JSON body `{ answer }`
-  - Update `MatchesView` so “Answer spark” opens a modal, enforces a character limit, submits the answer, and relies on refreshed match categories to reflect the unlocked state.
+- Keep the Spark prompt deterministic on the client via the existing daily question bank.
+- Persist answers to Supabase (`spark_answers`) and subscribe to realtime events to drive:
+  - match status updates to `sparked`
+  - gated chat flow until both users confirm to continue
 - Rationale:
-  - Demonstrates clean engineering (domain state machine + API boundary + persisted storage) while staying within take-home scope.
-  - Achieves the core UX moment: mutual answering unlocks chat and reveals the full state.
+  - Demonstrates clean engineering without demo-only backend hacks.
+  - Keeps the UX aligned with mutual spark + mutual chat unlock.

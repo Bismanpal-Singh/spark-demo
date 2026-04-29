@@ -1,13 +1,110 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { BottomNav, type TabType } from "@/components/BottomNav"
 import { DiscoverView } from "@/components/DiscoverView"
 import { MatchesView } from "@/components/MatchesView"
 import { ChatView } from "@/components/ChatView"
 import { ProfileView } from "@/components/ProfileView"
+import { LoginView } from "@/components/LoginView"
+import { supabase } from "@/src/supabase"
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("discover")
-  const [viewer, setViewer] = useState<"a" | "b">("a")
+  const [userId, setUserId] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  const [chatMatchId, setChatMatchId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const bootstrap = async () => {
+      setAuthLoading(true)
+      const { data } = await supabase.auth.getUser()
+      if (!mounted) return
+      setUserId(data.user?.id ?? null)
+      setAuthLoading(false)
+    }
+
+    void bootstrap()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null)
+    })
+
+    return () => {
+      mounted = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!userId) return
+
+    const channel = supabase
+      .channel(`spark_answers:status:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "spark_answers",
+        },
+        async (payload) => {
+          const row = payload.new as { match_id?: string }
+          const matchId = row?.match_id
+          if (!matchId) return
+
+          try {
+            const { data: matchRow } = await supabase
+              .from("matches")
+              .select("id,user_a,user_b,status")
+              .eq("id", matchId)
+              .maybeSingle()
+
+            if (!matchRow) return
+            const { user_a, user_b, status } = matchRow as {
+              user_a: string
+              user_b: string
+              status: string
+            }
+
+            // Only participants update match status.
+            if (userId !== user_a && userId !== user_b) return
+
+            const { data: answers } = await supabase
+              .from("spark_answers")
+              .select("user_id")
+              .eq("match_id", matchId)
+
+            const answered = new Set((answers ?? []).map((a) => (a as any).user_id))
+            const bothAnswered = answered.has(user_a) && answered.has(user_b)
+
+            if (!bothAnswered) return
+            if (status === "sparked" || status === "dating") return
+
+            await supabase.from("matches").update({ status: "sparked" }).eq("id", matchId)
+          } catch {
+            // Non-blocking.
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId])
+
+  if (authLoading) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-background">
+        <div className="h-10 w-10 animate-pulse rounded-full bg-primary/20" />
+      </div>
+    )
+  }
+
+  if (!userId) {
+    return <LoginView />
+  }
 
   return (
     <div className="h-dvh overflow-hidden bg-gradient-to-b from-background to-muted/40">
@@ -15,82 +112,24 @@ export default function App() {
         <aside className="hidden flex-1 rounded-3xl border border-border/60 bg-card/70 p-8 backdrop-blur lg:block">
           <h1 className="text-3xl font-bold tracking-tight">Spark</h1>
           <p className="mt-3 max-w-md text-muted-foreground">
-            Mobile-first dating experience, now with a cleaner desktop shell.
+            Mutual icebreakers, then real conversation.
           </p>
-
-          <div className="mt-6 rounded-2xl border border-border/50 bg-background/40 p-4">
-            <div className="text-sm font-semibold text-foreground">Simulate account</div>
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => setViewer("a")}
-                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                  viewer === "a"
-                    ? "border-primary bg-primary/15 text-foreground"
-                    : "border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/30"
-                }`}
-              >
-                Account A
-              </button>
-              <button
-                onClick={() => setViewer("b")}
-                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                  viewer === "b"
-                    ? "border-primary bg-primary/15 text-foreground"
-                    : "border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/30"
-                }`}
-              >
-                Account B
-              </button>
-            </div>
-
-            <button
-              onClick={async () => {
-                await fetch("/api/me/reset", { method: "POST" })
-                // No need to refetch everything here; each tab refetches on mount.
-              }}
-              className="mt-3 w-full rounded-xl bg-muted/30 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
-            >
-              Reset spark state
-            </button>
-          </div>
         </aside>
 
         <main className="relative flex h-full w-full flex-col overflow-hidden bg-background lg:flex-1 lg:rounded-3xl lg:border lg:border-border lg:shadow-xl">
-          <div className="pointer-events-auto absolute left-3 top-3 z-30 lg:hidden">
-            <div className="flex gap-2 rounded-2xl border border-border/70 bg-card/80 p-1 backdrop-blur">
-              <button
-                onClick={() => setViewer("a")}
-                className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
-                  viewer === "a"
-                    ? "bg-primary/15 text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                A
-              </button>
-              <button
-                onClick={() => setViewer("b")}
-                className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
-                  viewer === "b"
-                    ? "bg-primary/15 text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                B
-              </button>
-            </div>
-          </div>
-
           <div className="min-h-0 flex-1 overflow-hidden">
             {activeTab === "discover" && <DiscoverView />}
             {activeTab === "matches" && (
               <MatchesView
-                viewer={viewer}
-                onGoToChat={() => setActiveTab("chat")}
+                userId={userId}
+                onGoToChat={(matchId) => {
+                  setChatMatchId(matchId)
+                  setActiveTab("chat")
+                }}
               />
             )}
-            {activeTab === "chat" && <ChatView viewer={viewer} />}
-            {activeTab === "profile" && <ProfileView viewer={viewer} />}
+            {activeTab === "chat" && <ChatView userId={userId} initialMatchId={chatMatchId} />}
+            {activeTab === "profile" && <ProfileView userId={userId} />}
           </div>
           <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
         </main>
@@ -98,3 +137,4 @@ export default function App() {
     </div>
   )
 }
+
