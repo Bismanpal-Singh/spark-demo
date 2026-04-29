@@ -133,14 +133,14 @@ export function ProfileCard({
         {/* Like border glow */}
         <div
           data-like-border
-          className="pointer-events-none absolute inset-0 border-[3px] border-emerald-400"
+          className="pointer-events-none absolute inset-0 border-2 border-emerald-300/80 shadow-[inset_0_0_60px_rgba(16,185,129,0.28)]"
           style={{ opacity: 0 }}
         />
 
         {/* Nope border glow */}
         <div
           data-nope-border
-          className="pointer-events-none absolute inset-0 border-[3px] border-rose-400"
+          className="pointer-events-none absolute inset-0 border-2 border-rose-300/80 shadow-[inset_0_0_60px_rgba(244,63,94,0.24)]"
           style={{ opacity: 0 }}
         />
 
@@ -150,9 +150,9 @@ export function ProfileCard({
           className="pointer-events-none absolute left-1/2 top-12 z-20 -translate-x-1/2"
           style={{ opacity: 0 }}
         >
-          <div className="flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2 shadow-lg">
-            <Heart className="h-4 w-4 text-white" fill="white" />
-            <span className="text-sm font-semibold text-white">LIKE</span>
+          <div className="flex items-center gap-2 rounded-full border border-emerald-200/70 bg-emerald-400/20 px-4 py-2 shadow-[0_8px_30px_rgba(16,185,129,0.25)] backdrop-blur-md">
+            <Heart className="h-4 w-4 text-emerald-100" fill="currentColor" />
+            <span className="text-xs font-semibold tracking-[0.18em] text-emerald-50">LIKE</span>
           </div>
         </div>
 
@@ -162,9 +162,9 @@ export function ProfileCard({
           className="pointer-events-none absolute left-1/2 top-12 z-20 -translate-x-1/2"
           style={{ opacity: 0 }}
         >
-          <div className="flex items-center gap-2 rounded-full bg-rose-500 px-5 py-2 shadow-lg">
-            <X className="h-4 w-4 text-white" />
-            <span className="text-sm font-semibold text-white">NOPE</span>
+          <div className="flex items-center gap-2 rounded-full border border-rose-200/70 bg-rose-400/20 px-4 py-2 shadow-[0_8px_30px_rgba(244,63,94,0.22)] backdrop-blur-md">
+            <X className="h-4 w-4 text-rose-100" />
+            <span className="text-xs font-semibold tracking-[0.18em] text-rose-50">NOPE</span>
           </div>
         </div>
 

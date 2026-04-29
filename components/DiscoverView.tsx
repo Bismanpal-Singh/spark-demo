@@ -76,23 +76,31 @@ export function DiscoverView() {
 
       {/* Match Modal */}
       {showMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="animate-scale-up mx-4 rounded-3xl bg-card p-8 text-center shadow-2xl">
-            <div className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
-              <Sparkles className="h-10 w-10 text-white" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5 backdrop-blur-md">
+          <div className="animate-scale-up w-full max-w-sm rounded-3xl border border-white/15 bg-card/85 p-6 text-center shadow-[0_20px_80px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+            <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-fuchsia-400/25 to-rose-300/20">
+              <Sparkles className="h-8 w-8 text-white" />
             </div>
-            <h2 className="mb-2 text-2xl font-bold text-foreground">
+            <h2 className="mb-2 text-2xl font-semibold tracking-tight text-foreground">
               {"It's a Match!"}
             </h2>
-            <p className="mb-6 text-muted-foreground">
-              Answer the spark question to unlock their profile
+            <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+              Your energy matched. Answer one spark question to unlock the full profile.
             </p>
-            <button
-              onClick={() => setShowMatch(false)}
-              className="w-full rounded-2xl bg-primary py-4 font-semibold text-primary-foreground transition-all hover:bg-primary/90"
-            >
-              Answer Now
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowMatch(false)}
+                className="flex-1 rounded-xl border border-border/70 bg-muted/50 py-3 text-sm font-medium text-foreground/90 transition-all hover:bg-muted"
+              >
+                Later
+              </button>
+              <button
+                onClick={() => setShowMatch(false)}
+                className="flex-1 rounded-xl bg-gradient-to-r from-fuchsia-500 to-rose-400 py-3 text-sm font-semibold text-white transition-all hover:brightness-110"
+              >
+                Answer now
+              </button>
+            </div>
           </div>
         </div>
       )}
