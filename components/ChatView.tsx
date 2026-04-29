@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MessageCircle, Sparkles } from "lucide-react"
 import { ChatConversation } from "./ChatConversation"
 
@@ -42,12 +42,43 @@ const mockChats: ChatPreview[] = [
 
 export function ChatView() {
   const [selectedChat, setSelectedChat] = useState<ChatPreview | null>(null)
+  const [pinnedSpark, setPinnedSpark] = useState<{
+    myAnswer?: string | null
+    theirAnswer?: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    const loadPinnedSpark = async () => {
+      try {
+        const res = await fetch("/api/me/matches")
+        if (!res.ok) return
+        const json = (await res.json()) as {
+          sparked: Array<{
+            name: string
+            myAnswer?: string | null
+            theirAnswer?: string | null
+          }>
+        }
+        const sparked = json.sparked?.[0]
+        if (!sparked) return
+        setPinnedSpark({
+          myAnswer: sparked.myAnswer ?? null,
+          theirAnswer: sparked.theirAnswer ?? null,
+        })
+      } catch {
+        // Keep it non-blocking for demo.
+      }
+    }
+
+    void loadPinnedSpark()
+  }, [])
 
   if (selectedChat) {
     return (
       <ChatConversation
         chat={selectedChat}
         onBack={() => setSelectedChat(null)}
+        pinnedSpark={pinnedSpark ?? undefined}
       />
     )
   }

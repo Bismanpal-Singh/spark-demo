@@ -21,7 +21,7 @@ export default function App() {
         <main className="relative flex h-full w-full flex-col overflow-hidden bg-background lg:flex-1 lg:rounded-3xl lg:border lg:border-border lg:shadow-xl">
           <div className="min-h-0 flex-1 overflow-hidden">
             {activeTab === "discover" && <DiscoverView />}
-            {activeTab === "matches" && <MatchesView />}
+            {activeTab === "matches" && <MatchesView onGoToChat={() => setActiveTab("chat")} />}
             {activeTab === "chat" && <ChatView />}
             {activeTab === "profile" && <ProfileView />}
           </div>

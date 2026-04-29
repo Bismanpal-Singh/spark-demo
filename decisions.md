@@ -69,3 +69,20 @@
 - Risks:
   - File-backed storage is not concurrency-safe (acceptable for a demo).
   - No authorization/RLS (intentionally deferred for assignment scope).
+
+## D-008: Implement Spark Vertical Slice (Question + Answer + Unlock)
+- Date: 2026-04-29
+- Status: In Progress / MVP
+- Decision:
+  - Keep the Spark prompt deterministic by using a local hardcoded question bank + a daily index picker (no DB for questions).
+  - Extend the local file-backed match state to include:
+    - `sparkQuestion`
+    - `myAnswer`
+    - `theirAnswer`
+  - Add API endpoints in the Vite dev server:
+    - `GET /api/me/matches/:id/spark-question`
+    - `POST /api/me/matches/:id/reply-spark` with JSON body `{ answer }`
+  - Update `MatchesView` so “Answer spark” opens a modal, enforces a character limit, submits the answer, and relies on refreshed match categories to reflect the unlocked state.
+- Rationale:
+  - Demonstrates clean engineering (domain state machine + API boundary + persisted storage) while staying within take-home scope.
+  - Achieves the core UX moment: mutual answering unlocks chat and reveals the full state.
