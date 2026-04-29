@@ -58,7 +58,7 @@ export function ChatConversation({ chat, onBack }: ChatConversationProps) {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex h-full flex-col bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur-lg">
         <div className="flex items-center justify-between px-4 py-3">
@@ -118,7 +118,7 @@ export function ChatConversation({ chat, onBack }: ChatConversationProps) {
       </div>
 
       {/* Message Input */}
-      <div className="border-t border-border bg-card p-4 pb-24">
+      <div className="border-t border-border bg-card p-4">
         <div className="mx-auto flex max-w-lg items-center gap-3">
           <input
             type="text"

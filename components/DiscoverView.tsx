@@ -37,7 +37,7 @@ export function DiscoverView() {
   const handleSwipeRight = useCallback(() => handleSwipe("right"), [handleSwipe])
 
   return (
-    <div className="relative flex h-full flex-col bg-background pb-16">
+    <div className="relative flex h-full min-h-0 flex-col bg-background">
       {/* Full screen card stack */}
       <div className="relative flex-1 overflow-hidden">
         {/* Background card (next profile) */}

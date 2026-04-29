@@ -14,8 +14,8 @@ const currentUser = {
 
 export function ProfileView() {
   return (
-    <div className="min-h-screen bg-background pb-24 pt-4">
-      <div className="mx-auto max-w-lg px-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-6 pt-4">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">Your Profile</h1>

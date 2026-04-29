@@ -18,7 +18,7 @@ const tabs: { id: TabType; label: string; icon: typeof Sparkles }[] = [
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   return (
-    <nav className="absolute inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 backdrop-blur-lg">
+    <nav className="z-[60] shrink-0 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg">
       <div className="flex h-16 items-center justify-around px-2">
         {tabs.map((tab) => {
           const Icon = tab.icon

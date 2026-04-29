@@ -29,8 +29,8 @@ const mockMatches: Match[] = [
 
 export function MatchesView() {
   return (
-    <div className="min-h-screen bg-background pb-24 pt-4">
-      <div className="mx-auto max-w-lg px-4">
+    <div className="flex h-full flex-col bg-background">
+      <div className="mx-auto h-full w-full max-w-lg overflow-y-auto px-4 pb-6 pt-4">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">Your Matches</h1>

@@ -9,8 +9,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("discover")
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background to-muted/40">
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-stretch lg:gap-8 lg:px-6 lg:py-6">
+    <div className="h-dvh overflow-hidden bg-gradient-to-b from-background to-muted/40">
+      <div className="mx-auto flex h-full w-full max-w-6xl items-stretch overflow-hidden lg:gap-8 lg:px-6 lg:py-6">
         <aside className="hidden flex-1 rounded-3xl border border-border/60 bg-card/70 p-8 backdrop-blur lg:block">
           <h1 className="text-3xl font-bold tracking-tight">Spark</h1>
           <p className="mt-3 max-w-md text-muted-foreground">
@@ -18,8 +18,8 @@ export default function App() {
           </p>
         </aside>
 
-        <main className="relative min-h-dvh w-full overflow-hidden bg-background lg:min-h-0 lg:flex-1 lg:rounded-3xl lg:border lg:border-border lg:shadow-xl">
-          <div className="h-full overflow-hidden">
+        <main className="relative flex h-full w-full flex-col overflow-hidden bg-background lg:flex-1 lg:rounded-3xl lg:border lg:border-border lg:shadow-xl">
+          <div className="min-h-0 flex-1 overflow-hidden">
             {activeTab === "discover" && <DiscoverView />}
             {activeTab === "matches" && <MatchesView />}
             {activeTab === "chat" && <ChatView />}
