@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, Flame, Send } from "lucide-react"
+import { ArrowLeft, Flame, MapPin, Send, X } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { supabase } from "@/src/supabase"
 import { IgniteConfirmSheet, IgniteDateFlow } from "@/components/IgniteDateFlow"
 import { selectTask, type TaskProfile } from "@/lib/tasks"
+import { toDiscoverProfile, type DiscoverProfile, type RichUserRow } from "@/lib/profileVisibility"
+import { Badge } from "@/components/ui/badge"
 
 type MatchStatus = "pending" | "sparked" | "dating"
 
@@ -101,8 +103,96 @@ export function ChatConversation({
   const [showIgniteFlow, setShowIgniteFlow] = useState(false)
   const [igniteFlowMode, setIgniteFlowMode] = useState<"intro" | "task">("intro")
   const [meProfile, setMeProfile] = useState<MeMini>({ id: userId, display_name: "you", avatar_url: null })
+  /** Previous date_request.status within this mount — resets on leave/return so we don't re-fire auto-open. */
   const prevDateRequestStatusRef = useRef<DateRequestRow["status"] | undefined>(undefined)
+  /** Previous friction_tasks.status within this mount — same as above for the reveal. */
+  const prevTaskStatusRef = useRef<FrictionTaskRow["status"] | undefined>(undefined)
   const [lastCompletedRevealTaskId, setLastCompletedRevealTaskId] = useState<string | null>(null)
+  const [icebreakerUserDismissed, setIcebreakerUserDismissed] = useState(false)
+
+  const icebreakerDismissStorageKey = `chat-icebreaker-dismissed:${userId}:${match.id}`
+
+  useEffect(() => {
+    try {
+      setIcebreakerUserDismissed(localStorage.getItem(icebreakerDismissStorageKey) === "1")
+    } catch {
+      setIcebreakerUserDismissed(false)
+    }
+  }, [icebreakerDismissStorageKey])
+
+  const igniteFrictionComplete = taskRow?.status === "complete"
+  const showPinnedIcebreaker =
+    !igniteFrictionComplete && !icebreakerUserDismissed && Boolean(theirAnswer && myAnswer)
+
+  const dismissIcebreakerPinned = () => {
+    setIcebreakerUserDismissed(true)
+    try {
+      localStorage.setItem(icebreakerDismissStorageKey, "1")
+    } catch {
+      // non-blocking
+    }
+  }
+
+  const [partnerProfileOpen, setPartnerProfileOpen] = useState(false)
+  const [partnerRich, setPartnerRich] = useState<RichUserRow | null>(null)
+  const [partnerProfileLoading, setPartnerProfileLoading] = useState(false)
+  const [partnerProfileError, setPartnerProfileError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPartnerRich(null)
+    setPartnerProfileOpen(false)
+    setPartnerProfileError(null)
+  }, [other.id, match.id])
+
+  const partnerFullProfile = useMemo((): DiscoverProfile | null => {
+    if (!partnerRich) return null
+    return toDiscoverProfile(partnerRich, true)
+  }, [partnerRich])
+
+  const loadPartnerFullProfile = async () => {
+    setPartnerProfileLoading(true)
+    setPartnerProfileError(null)
+    try {
+      const rich = await supabase
+        .from("users")
+        .select(
+          "id,display_name,age,city,bio,avatar_url,gallery_urls,preferences,looking_for,fun_fact",
+        )
+        .eq("id", other.id)
+        .maybeSingle()
+
+      if (rich.error) {
+        const basic = await supabase
+          .from("users")
+          .select("id,display_name,age,city,bio,avatar_url")
+          .eq("id", other.id)
+          .maybeSingle()
+        if (basic.error) throw basic.error
+        setPartnerRich(basic.data as RichUserRow)
+      } else {
+        setPartnerRich((rich.data ?? null) as RichUserRow | null)
+      }
+    } catch (e) {
+      setPartnerProfileError(e instanceof Error ? e.message : "Failed to load profile")
+      setPartnerRich({
+        id: other.id,
+        display_name: other.display_name,
+        avatar_url: other.avatar_url,
+        bio: null,
+        age: null,
+        city: null,
+      })
+    } finally {
+      setPartnerProfileLoading(false)
+    }
+  }
+
+  const openPartnerProfile = () => {
+    setPartnerProfileOpen(true)
+    if (partnerRich?.id !== other.id) {
+      void loadPartnerFullProfile()
+    }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -145,11 +235,22 @@ export function ChatConversation({
   }, [match.id, userId])
 
   useEffect(() => {
-    const currentStatus = dateRequest?.status
-    const wasAccepted = prevDateRequestStatusRef.current === "accepted"
-    prevDateRequestStatusRef.current = currentStatus
+    const cur = dateRequest?.status
+    const prev = prevDateRequestStatusRef.current
 
-    if (currentStatus !== "accepted" || wasAccepted) return
+    if (cur !== "accepted") {
+      prevDateRequestStatusRef.current = cur
+      return
+    }
+
+    prevDateRequestStatusRef.current = "accepted"
+
+    // Only auto-open when we *transition* into accepted (e.g. user tapped "i'm in").
+    // If the first fetch is already accepted (return visit / remount), do nothing.
+    if (prev !== "pending") return
+    // Accept handler may have already opened the flow; avoid stacking the same open.
+    if (showIgniteFlow) return
+
     void (async () => {
       try {
         await ensureFrictionTask()
@@ -160,11 +261,25 @@ export function ChatConversation({
       setShowIgniteFlow(true)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRequest?.status])
+  }, [dateRequest?.status, showIgniteFlow])
 
   useEffect(() => {
-    if (!taskRow || taskRow.status !== "complete" || showIgniteFlow) return
+    if (!taskRow) {
+      prevTaskStatusRef.current = undefined
+      return
+    }
+
+    const cur = taskRow.status
+    const prev = prevTaskStatusRef.current
+    prevTaskStatusRef.current = cur
+
+    if (cur !== "complete" || showIgniteFlow) return
     if (lastCompletedRevealTaskId === taskRow.id) return
+
+    // Only auto-open when both answers just landed (active → complete), not when
+    // we open chat and the task is already complete.
+    if (prev !== "active") return
+
     setIgniteFlowMode("task")
     setShowIgniteFlow(true)
   }, [taskRow, showIgniteFlow, lastCompletedRevealTaskId])
@@ -344,6 +459,9 @@ export function ChatConversation({
       if (updateError) throw updateError
       await supabase.from("matches").update({ status: "dating" }).eq("id", match.id)
       await ensureFrictionTask()
+      prevDateRequestStatusRef.current = "accepted"
+      setDateRequest({ ...dateRequest, status: "accepted" })
+      setIgniteFlowMode("intro")
       setShowIgniteFlow(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to accept request")
@@ -429,19 +547,21 @@ export function ChatConversation({
               <ArrowLeft className="h-5 w-5" />
             </button>
 
-            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => openPartnerProfile()}
+              className="flex min-w-0 items-center gap-3 rounded-2xl py-1 pl-1 pr-3 text-left transition-colors hover:bg-muted/60"
+            >
               <img
                 src={other.avatar_url ?? ""}
                 alt={other.display_name ?? "Profile"}
-                className="h-10 w-10 rounded-full object-cover"
+                className="h-10 w-10 shrink-0 rounded-full object-cover"
               />
-              <div>
-                <h2 className="font-semibold text-foreground">{other.display_name ?? "Unknown"}</h2>
-                <p className="text-xs text-muted-foreground">
-                  Chatting
-                </p>
+              <div className="min-w-0">
+                <h2 className="truncate font-semibold text-foreground">{other.display_name ?? "Unknown"}</h2>
+                <p className="text-xs text-muted-foreground">Matched · full profile</p>
               </div>
-            </div>
+            </button>
           </div>
 
           <button
@@ -472,8 +592,16 @@ export function ChatConversation({
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-lg space-y-4">
-          {pinned && (
-            <div className="rounded-2xl border border-white/10 bg-card/70 p-3 shadow-sm backdrop-blur-sm">
+          {showPinnedIcebreaker && (
+            <div className="relative rounded-2xl border border-white/10 bg-card/70 p-3 pr-10 shadow-sm backdrop-blur-sm">
+              <button
+                type="button"
+                onClick={dismissIcebreakerPinned}
+                aria-label="Dismiss icebreaker"
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
@@ -638,6 +766,115 @@ export function ChatConversation({
         onClose={closeIgniteFlow}
         onSubmitResponse={submitTaskResponse}
       />
+
+      <AnimatePresence>
+        {partnerProfileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] flex items-end justify-center bg-black/65 p-0 sm:items-center sm:p-4"
+          >
+            <motion.button
+              type="button"
+              aria-label="Close profile"
+              className="absolute inset-0"
+              onClick={() => setPartnerProfileOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              className="relative z-[101] flex max-h-[min(92dvh,820px)] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-border/80 bg-card shadow-2xl sm:rounded-[28px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
+                <span className="text-sm font-semibold text-foreground">Profile</span>
+                <button
+                  type="button"
+                  onClick={() => setPartnerProfileOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {partnerProfileLoading && !partnerFullProfile && (
+                  <div className="space-y-3 p-4">
+                    <div className="aspect-[4/5] w-full animate-pulse rounded-2xl bg-muted" />
+                    <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+                  </div>
+                )}
+
+                {partnerProfileError && (
+                  <p className="p-4 text-sm text-rose-400/90">{partnerProfileError}</p>
+                )}
+
+                {partnerFullProfile && (
+                  <div className="pb-6">
+                    <div className="space-y-2 px-3 pt-2">
+                      {partnerFullProfile.photos.filter(Boolean).map((src, i) => (
+                        <div
+                          key={`${src}-${i}`}
+                          className="overflow-hidden rounded-2xl border border-border/60 bg-muted/20"
+                        >
+                          <img src={src} alt="" className="aspect-[4/5] w-full object-cover sm:aspect-[3/4]" />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="px-4 pt-4">
+                      <div className="flex items-baseline gap-2">
+                        <h3 className="text-2xl font-bold text-foreground">{partnerFullProfile.name}</h3>
+                        {partnerFullProfile.age ? (
+                          <span className="text-lg font-light text-muted-foreground">{partnerFullProfile.age}</span>
+                        ) : null}
+                      </div>
+                      {partnerFullProfile.city && partnerFullProfile.city !== "Unknown" ? (
+                        <div className="mt-1 flex items-center gap-1.5 text-muted-foreground">
+                          <MapPin className="h-3.5 w-3.5 shrink-0" />
+                          <span className="text-sm">{partnerFullProfile.city}</span>
+                        </div>
+                      ) : null}
+
+                      <p className="mt-4 text-sm leading-relaxed text-foreground/90">{partnerFullProfile.fullBio}</p>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {partnerFullProfile.allInterests.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-100"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+
+                      {partnerFullProfile.lookingFor ? (
+                        <p className="mt-4 text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground/80">Looking for:</span>{" "}
+                          {partnerFullProfile.lookingFor}
+                        </p>
+                      ) : null}
+                      {partnerFullProfile.funFact ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground/80">Fun fact:</span>{" "}
+                          {partnerFullProfile.funFact}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

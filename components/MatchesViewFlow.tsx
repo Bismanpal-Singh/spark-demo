@@ -289,16 +289,32 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
     setSparkLoading(true)
     setSparkError(null)
     try {
-      await supabase.from("spark_answers").upsert({ match_id: sparkMatchId, user_id: userId, answer: answer.trim() }, { onConflict: "match_id,user_id" })
-
-      const { data: matchRow } = await supabase.from("matches").select("id,user_a,user_b").eq("id", sparkMatchId).single()
-      if (!matchRow) {
-        setSparkOpen(false)
-        await refresh()
-        return
+      const { error: upsertError } = await supabase
+        .from("spark_answers")
+        .upsert(
+          { match_id: sparkMatchId, user_id: userId, answer: answer.trim() },
+          { onConflict: "match_id,user_id" },
+        )
+      if (upsertError) {
+        throw new Error(upsertError.message || "Could not save your answer")
       }
 
-      const { data: answers } = await supabase.from("spark_answers").select("user_id").eq("match_id", sparkMatchId)
+      const { data: matchRow, error: matchErr } = await supabase
+        .from("matches")
+        .select("id,user_a,user_b")
+        .eq("id", sparkMatchId)
+        .single()
+      if (matchErr || !matchRow) {
+        throw new Error(matchErr?.message ?? "Match not found")
+      }
+
+      const { data: answers, error: answersErr } = await supabase
+        .from("spark_answers")
+        .select("user_id")
+        .eq("match_id", sparkMatchId)
+      if (answersErr) {
+        throw new Error(answersErr.message)
+      }
       const answeredUserIds = new Set((answers ?? []).map((a) => a.user_id))
       const bothAnswered = answeredUserIds.has(matchRow.user_a) && answeredUserIds.has(matchRow.user_b)
 
@@ -461,8 +477,19 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
             <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold">Spark prompt</h2><button onClick={() => setSparkOpen(false)} aria-label="Close"><X className="h-4 w-4" /></button></div>
             <p className="mb-2 text-sm">{sparkQuestion}</p>
             <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} maxLength={SPARK_MAX_CHARS} className="min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm" />
+            <p className="mt-1 text-right text-xs text-muted-foreground">
+              {answer.trim().length}/{SPARK_MAX_CHARS}
+              {answer.trim().length < SPARK_MIN_CHARS ? ` · at least ${SPARK_MIN_CHARS} characters` : ""}
+            </p>
             {sparkError && <div className="mt-2 text-sm text-rose-300">{sparkError}</div>}
-            <button disabled={!canSubmit || sparkLoading} onClick={() => void submitSparkAnswer()} className="mt-3 w-full rounded-xl bg-primary py-2 text-sm font-semibold text-primary-foreground">Unlock spark</button>
+            <button
+              type="button"
+              disabled={!canSubmit || sparkLoading}
+              onClick={() => void submitSparkAnswer()}
+              className="mt-3 w-full rounded-xl bg-primary py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sparkLoading ? "Saving…" : "Unlock spark"}
+            </button>
           </div>
         </div>
       )}
