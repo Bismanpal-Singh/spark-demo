@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { motion } from "framer-motion"
 
 export type SparkRevealProfile = {
@@ -22,15 +22,6 @@ export function SparkReveal({
   const hasPhoto = Boolean(matchedProfile.photos?.[0]) && !photoFailed
   const photoUrl = matchedProfile.photos?.[0]
   const calledRef = useRef(false)
-
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      if (calledRef.current) return
-      calledRef.current = true
-      onComplete()
-    }, 3000)
-    return () => window.clearTimeout(t)
-  }, [onComplete])
 
   return (
     <motion.div
@@ -115,6 +106,21 @@ export function SparkReveal({
         >
           Conversation unlocked. Say hi and keep the spark going.
         </motion.p>
+
+        <motion.button
+          type="button"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: hasPhoto ? 1.5 : 1.2, ease: "easeOut" }}
+          className="mt-6 rounded-full bg-white/90 px-6 py-2.5 text-sm font-semibold text-black transition hover:bg-white"
+          onClick={() => {
+            if (calledRef.current) return
+            calledRef.current = true
+            onComplete()
+          }}
+        >
+          Continue to chat
+        </motion.button>
 
       </div>
     </motion.div>

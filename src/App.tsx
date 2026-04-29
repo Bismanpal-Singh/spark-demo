@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { BottomNav, type TabType } from "@/components/BottomNav"
 import { DiscoverView } from "@/components/DiscoverView"
-import { MatchesView } from "@/components/MatchesView"
+import { MatchesViewFlow } from "@/components/MatchesViewFlow"
 import { ChatView } from "@/components/ChatView"
 import { ProfileView } from "@/components/ProfileView"
 import { LoginView } from "@/components/LoginView"
@@ -120,7 +120,7 @@ export default function App() {
           <div className="min-h-0 flex-1 overflow-hidden">
             {activeTab === "discover" && <DiscoverView userId={userId} />}
             {activeTab === "matches" && (
-              <MatchesView
+              <MatchesViewFlow
                 userId={userId}
                 onGoToChat={(matchId) => {
                   setChatMatchId(matchId)
