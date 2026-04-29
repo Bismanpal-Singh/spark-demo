@@ -169,7 +169,7 @@ export function ProfileCard({
         </div>
 
         {/* Content */}
-        <div className="absolute inset-x-0 bottom-0 p-4 pb-20 text-white">
+        <div className="absolute inset-x-0 bottom-0 p-4 pb-4 text-white">
           {/* Name and Age */}
           <div className="mb-1 flex items-baseline gap-2">
             <h2 className="text-2xl font-bold">{profile.name}</h2>

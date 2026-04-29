@@ -72,13 +72,6 @@ export function DiscoverView() {
           </div>
         )}
 
-        {/* Action buttons - overlaid on card above bottom nav */}
-        <div className="absolute inset-x-0 bottom-20 z-30 flex justify-center">
-          <ActionButtons
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-          />
-        </div>
       </div>
 
       {/* Match Modal */}
