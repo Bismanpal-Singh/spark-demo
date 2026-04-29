@@ -47,3 +47,10 @@ create policy "likes_update_participants"
     from_user_id = auth.uid() or to_user_id = auth.uid()
   );
 
+create policy "likes_delete_me_only"
+  on public.likes
+  for delete
+  using (
+    from_user_id = auth.uid() or to_user_id = auth.uid()
+  );
+

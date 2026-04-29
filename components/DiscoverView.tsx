@@ -83,7 +83,13 @@ function DiscoverBrandHeader() {
   )
 }
 
-export function DiscoverView({ userId }: { userId: string }) {
+export function DiscoverView({
+  userId,
+  refreshNonce = 0,
+}: {
+  userId: string
+  refreshNonce?: number
+}) {
   const [profiles, setProfiles] = useState<DiscoverProfile[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null)
@@ -167,7 +173,7 @@ export function DiscoverView({ userId }: { userId: string }) {
   useEffect(() => {
     void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [userId, refreshNonce])
 
   const currentProfile = useMemo(() => profiles[currentIndex], [profiles, currentIndex])
   const nextProfile = useMemo(() => profiles[currentIndex + 1], [profiles, currentIndex])

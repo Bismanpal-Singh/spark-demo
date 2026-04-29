@@ -13,6 +13,9 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true)
 
   const [chatMatchId, setChatMatchId] = useState<string | null>(null)
+  const [discoverRefreshNonce, setDiscoverRefreshNonce] = useState(0)
+  const [controlError, setControlError] = useState<string | null>(null)
+  const [resettingDiscover, setResettingDiscover] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -106,6 +109,24 @@ export default function App() {
     return <LoginView />
   }
 
+  const resetDiscover = async () => {
+    setControlError(null)
+    setResettingDiscover(true)
+    try {
+      const { error } = await supabase
+        .from("likes")
+        .delete()
+        .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+      if (error) throw error
+      setDiscoverRefreshNonce((n) => n + 1)
+      if (activeTab !== "discover") setActiveTab("discover")
+    } catch (e) {
+      setControlError(e instanceof Error ? e.message : "Reset failed")
+    } finally {
+      setResettingDiscover(false)
+    }
+  }
+
   return (
     <div className="h-dvh overflow-hidden bg-gradient-to-b from-background to-muted/40">
       <div className="mx-auto flex h-full w-full max-w-6xl items-stretch overflow-hidden lg:gap-8 lg:px-6 lg:py-6">
@@ -114,11 +135,37 @@ export default function App() {
           <p className="mt-3 max-w-md text-muted-foreground">
             Mutual icebreakers, then real conversation.
           </p>
+
+          <div className="mt-8 rounded-2xl border border-border/60 bg-background/40 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Control panel
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void resetDiscover()}
+                disabled={resettingDiscover}
+                className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resettingDiscover ? "Resetting Discover..." : "Reset Discover"}
+              </button>
+              <p className="text-xs text-muted-foreground">
+                Shows all profiles again by clearing your swipe history.
+              </p>
+              {controlError && (
+                <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-foreground/90">
+                  {controlError}
+                </div>
+              )}
+            </div>
+          </div>
         </aside>
 
         <main className="relative flex h-full w-full flex-col overflow-hidden bg-background lg:flex-1 lg:rounded-3xl lg:border lg:border-border lg:shadow-xl">
           <div className="min-h-0 flex-1 overflow-hidden">
-            {activeTab === "discover" && <DiscoverView userId={userId} />}
+            {activeTab === "discover" && (
+              <DiscoverView userId={userId} refreshNonce={discoverRefreshNonce} />
+            )}
             {activeTab === "matches" && (
               <MatchesViewFlow
                 userId={userId}
