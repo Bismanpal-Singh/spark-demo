@@ -18,6 +18,7 @@ export default function App() {
   const [resettingDiscover, setResettingDiscover] = useState(false)
   const [resettingSpark, setResettingSpark] = useState(false)
   const [resettingIgnite, setResettingIgnite] = useState(false)
+  const [resettingMatches, setResettingMatches] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -194,6 +195,35 @@ export default function App() {
     }
   }
 
+  const resetMatches = async () => {
+    setControlError(null)
+    setResettingMatches(true)
+    try {
+      // Full workflow reset for this account:
+      // remove likes + matches where this user participates.
+      // Dependent spark answers/messages/date flow rows are deleted via FK cascade.
+      const { error: likesError } = await supabase
+        .from("likes")
+        .delete()
+        .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+      if (likesError) throw likesError
+
+      const { error: matchesError } = await supabase
+        .from("matches")
+        .delete()
+        .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+      if (matchesError) throw matchesError
+
+      setChatMatchId(null)
+      setDiscoverRefreshNonce((n) => n + 1)
+      if (activeTab !== "discover") setActiveTab("discover")
+    } catch (e) {
+      setControlError(e instanceof Error ? e.message : "Reset failed")
+    } finally {
+      setResettingMatches(false)
+    }
+  }
+
   return (
     <div className="h-dvh overflow-hidden bg-gradient-to-b from-background to-muted/40">
       <div className="mx-auto flex h-full w-full max-w-6xl items-stretch overflow-hidden lg:gap-8 lg:px-6 lg:py-6">
@@ -232,8 +262,16 @@ export default function App() {
               >
                 {resettingIgnite ? "Resetting Ignite..." : "Reset Ignite"}
               </button>
+              <button
+                type="button"
+                onClick={() => void resetMatches()}
+                disabled={resettingMatches}
+                className="rounded-2xl border border-border/70 bg-card/50 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resettingMatches ? "Resetting Matches..." : "Reset Matches"}
+              </button>
               <p className="text-xs text-muted-foreground">
-                Use Discover reset for swipes, Spark reset for Q/A flow, Ignite reset for date flow.
+                Use Discover reset for swipes, Spark reset for Q/A flow, Ignite reset for date flow, or Reset Matches for a full end-to-end restart.
               </p>
               {controlError && (
                 <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-foreground/90">
