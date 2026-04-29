@@ -36,8 +36,6 @@ type ChatMessageRow = {
   created_at: string
 }
 
-const ACCEPT_MARKER = "__chat_accepted__"
-
 function formatTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -63,35 +61,18 @@ export function ChatConversation({
   const [messages, setMessages] = useState<
     Array<{ id: string; sender: "me" | "them"; text: string; timestamp: string }>
   >([])
-
-  const [acceptedByA, setAcceptedByA] = useState(false)
-  const [acceptedByB, setAcceptedByB] = useState(false)
-  const [submittingAccept, setSubmittingAccept] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const unlocked = (acceptedByA && acceptedByB) || match.status === "dating"
-  const iAccepted = iAmA ? acceptedByA : acceptedByB
+  const unlocked = true
 
   const load = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const { data: acceptedRows } = await supabase
-        .from("messages")
-        .select("sender_id,content")
-        .eq("match_id", match.id)
-        .eq("content", ACCEPT_MARKER)
-
-      const acceptedSenderIds = new Set((acceptedRows ?? []).map((r) => r.sender_id))
-      setAcceptedByA(acceptedSenderIds.has(match.user_a))
-      setAcceptedByB(acceptedSenderIds.has(match.user_b))
-
       const { data: chatRows } = await supabase
         .from("messages")
         .select("id,sender_id,content,created_at")
         .eq("match_id", match.id)
-        .neq("content", ACCEPT_MARKER)
         .order("created_at", { ascending: true })
 
       setMessages(
@@ -130,19 +111,6 @@ export function ChatConversation({
           const row = payload.new as ChatMessageRow
           if (!row) return
 
-          if (row.content === ACCEPT_MARKER) {
-            const nextAcceptedByA =
-              row.sender_id === match.user_a ? true : acceptedByA
-            const nextAcceptedByB =
-              row.sender_id === match.user_b ? true : acceptedByB
-
-            setAcceptedByA(nextAcceptedByA)
-            setAcceptedByB(nextAcceptedByB)
-
-            void maybeUnlockStatus(nextAcceptedByA, nextAcceptedByB)
-            return
-          }
-
           setMessages((prev) => [
             ...prev,
             {
@@ -159,74 +127,7 @@ export function ChatConversation({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [match.id, userId, match.user_a, match.user_b, acceptedByA, acceptedByB])
-
-  const maybeUnlockStatus = async (nextAcceptedByA: boolean, nextAcceptedByB: boolean) => {
-    if (!(nextAcceptedByA && nextAcceptedByB)) return
-    try {
-      await supabase
-        .from("matches")
-        .update({ status: "dating" })
-        .eq("id", match.id)
-    } catch {
-      // Non-blocking for demo.
-    }
-  }
-
-  const acceptChat = async () => {
-    if (iAccepted || submittingAccept) return
-    setSubmittingAccept(true)
-    setError(null)
-    try {
-      const payload = {
-        match_id: match.id,
-        sender_id: userId,
-        content: ACCEPT_MARKER,
-      }
-
-      const { error: insertError } = await supabase.from("messages").insert(payload)
-      if (insertError) throw insertError
-
-      const nextAcceptedByA = iAmA ? true : acceptedByA
-      const nextAcceptedByB = iAmA ? acceptedByB : true
-      setAcceptedByA(nextAcceptedByA)
-      setAcceptedByB(nextAcceptedByB)
-
-      await maybeUnlockStatus(nextAcceptedByA, nextAcceptedByB)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to continue chat")
-    } finally {
-      setSubmittingAccept(false)
-    }
-  }
-
-  const unmatch = async () => {
-    setError(null)
-    try {
-      const { data, error: rpcError } = await supabase.rpc("reset_match_to_pending", {
-        p_match_id: match.id,
-      })
-      if (rpcError) throw rpcError
-      const raw = Array.isArray(data) ? (data[0] ?? null) : data
-      const result =
-        typeof raw === "string"
-          ? (() => {
-              try {
-                return JSON.parse(raw)
-              } catch {
-                return { ok: false, raw }
-              }
-            })()
-          : raw
-
-      if (!result || (result as any).ok !== true) {
-        throw new Error("Reset failed")
-      }
-      onBack()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to reset match")
-    }
-  }
+  }, [match.id, userId])
 
   const [newMessage, setNewMessage] = useState("")
   const sendMessage = async () => {
@@ -275,21 +176,15 @@ export function ChatConversation({
               <div>
                 <h2 className="font-semibold text-foreground">{other.display_name ?? "Unknown"}</h2>
                 <p className="text-xs text-muted-foreground">
-                  {unlocked ? "Chatting" : "Mutual intro"}
+                  Chatting
                 </p>
               </div>
             </div>
           </div>
 
           <button
-            disabled={!unlocked}
             onClick={() => void 0}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all active:scale-95 ${
-              unlocked
-                ? "bg-amber-500 text-white hover:bg-amber-600"
-                : "bg-amber-500/30 text-amber-100 hover:bg-amber-500/30"
-            }`}
-            aria-disabled={!unlocked}
+            className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-amber-600 active:scale-95"
           >
             <Flame className="h-3.5 w-3.5" />
             Ignite
@@ -346,80 +241,38 @@ export function ChatConversation({
             </div>
           )}
 
-          {!loading && !unlocked && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="rounded-2xl border border-white/10 bg-card/70 p-4 shadow-sm backdrop-blur-sm"
-            >
-              <div className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
-                Mutual decision
-              </div>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">Continue to chat?</h3>
-              <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                Both of you need to confirm before chat unlocks.
-              </p>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <button
-                  onClick={() => void acceptChat()}
-                  disabled={iAccepted}
-                  className={`rounded-2xl py-3 text-sm font-semibold transition-all active:scale-[0.99] ${
-                    iAccepted
-                      ? "cursor-not-allowed bg-primary/15 text-primary opacity-70"
-                      : "bg-gradient-to-r from-fuchsia-500 to-rose-400 text-white hover:opacity-95"
+          <AnimatePresence>
+            {messages.map((m) => (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className={`flex ${m.sender === "me" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                    m.sender === "me"
+                      ? "rounded-br-md bg-primary text-primary-foreground"
+                      : "rounded-bl-md bg-muted text-foreground"
                   }`}
                 >
-                  {iAccepted ? "Waiting for them…" : "Continue to chat"}
-                </button>
-
-                <button
-                  onClick={() => void unmatch()}
-                  className="rounded-2xl border border-rose-400/30 bg-rose-400/10 py-3 text-sm font-semibold text-rose-200 transition-colors hover:bg-rose-400/15"
-                >
-                  Reset to pending
-                </button>
-              </div>
-
-              {error && (
-                <div className="mt-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-foreground/90">
-                  {error}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {unlocked && (
-            <AnimatePresence>
-              {messages.map((m) => (
-                <motion.div
-                  key={m.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 6 }}
-                  className={`flex ${m.sender === "me" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                      m.sender === "me"
-                        ? "rounded-br-md bg-primary text-primary-foreground"
-                        : "rounded-bl-md bg-muted text-foreground"
+                  <p className="text-sm leading-relaxed">{m.text}</p>
+                  <p
+                    className={`mt-1 text-xs ${
+                      m.sender === "me" ? "text-primary-foreground/70" : "text-muted-foreground"
                     }`}
                   >
-                    <p className="text-sm leading-relaxed">{m.text}</p>
-                    <p
-                      className={`mt-1 text-xs ${
-                        m.sender === "me" ? "text-primary-foreground/70" : "text-muted-foreground"
-                      }`}
-                    >
-                      {m.timestamp}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                    {m.timestamp}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {error && (
+            <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-foreground/90">
+              {error}
+            </div>
           )}
         </div>
       </div>
@@ -428,17 +281,16 @@ export function ChatConversation({
         <div className="mx-auto flex max-w-lg items-center gap-3">
           <input
             type="text"
-            placeholder={unlocked ? "Type a message..." : "Chat unlocks after both confirm"}
+            placeholder="Type a message..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void sendMessage()}
-            disabled={!unlocked}
-            className={`flex-1 rounded-full bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-70`}
+            className="flex-1 rounded-full bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
 
           <button
             onClick={() => void sendMessage()}
-            disabled={!unlocked || !newMessage.trim()}
+            disabled={!newMessage.trim()}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-5 w-5" />

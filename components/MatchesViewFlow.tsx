@@ -114,15 +114,36 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   const submitSparkAnswer = async () => {
     if (!sparkMatchId) return
     setSparkLoading(true)
+    setSparkError(null)
     try {
       await supabase.from("spark_answers").upsert({ match_id: sparkMatchId, user_id: userId, answer: answer.trim() }, { onConflict: "match_id,user_id" })
+
       const { data: matchRow } = await supabase.from("matches").select("id,user_a,user_b").eq("id", sparkMatchId).single()
+      if (!matchRow) {
+        setSparkOpen(false)
+        await refresh()
+        return
+      }
+
+      const { data: answers } = await supabase.from("spark_answers").select("user_id").eq("match_id", sparkMatchId)
+      const answeredUserIds = new Set((answers ?? []).map((a) => a.user_id))
+      const bothAnswered = answeredUserIds.has(matchRow.user_a) && answeredUserIds.has(matchRow.user_b)
+
+      if (!bothAnswered) {
+        // Keep flow on matches list until the other person answers.
+        setSparkOpen(false)
+        await refresh()
+        return
+      }
+
       const otherId = getOtherUserId(matchRow as MatchRow, userId)
       const { data: otherUser } = await supabase.from("users").select("display_name,avatar_url,bio").eq("id", otherId).maybeSingle()
       setSparkRevealMatchId(sparkMatchId)
       setSparkRevealProfile({ name: otherUser?.display_name ?? "Your match", bio: otherUser?.bio ?? "Your connection is unlocked.", photos: otherUser?.avatar_url ? [otherUser.avatar_url] : [] })
       setSparkOpen(false)
       await refresh()
+    } catch (e) {
+      setSparkError(e instanceof Error ? e.message : "Failed to submit spark answer")
     } finally {
       setSparkLoading(false)
     }

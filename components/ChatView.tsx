@@ -198,7 +198,7 @@ export function ChatView({
       <div className="mx-auto h-full w-full max-w-lg overflow-y-auto px-4 pb-6 pt-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">Messages</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Sparks are mutual. Choose to continue.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Once both spark replies are in, chat opens.</p>
         </div>
 
         {actionError && (
@@ -255,7 +255,7 @@ export function ChatView({
                       <h3 className="font-semibold text-foreground">{row.other.display_name ?? "Unknown"}</h3>
                       <div className="mt-1 flex items-center gap-2">
                         <span className="text-sm text-muted-foreground truncate">
-                          {locked ? "View sparks and decide to continue." : "Chat unlocked."}
+                          {locked ? "Spark complete. Chat ready." : "Chat unlocked."}
                         </span>
                       </div>
                     </div>
@@ -302,7 +302,7 @@ export function ChatView({
               <div>
                 <h3 className="font-semibold text-foreground mb-1">Mutual intro ready</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Unlock chat only after both people choose to continue.
+                  Spark replies from both sides unlock chat automatically.
                 </p>
               </div>
             </div>
