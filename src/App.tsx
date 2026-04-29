@@ -16,6 +16,8 @@ export default function App() {
   const [discoverRefreshNonce, setDiscoverRefreshNonce] = useState(0)
   const [controlError, setControlError] = useState<string | null>(null)
   const [resettingDiscover, setResettingDiscover] = useState(false)
+  const [resettingSpark, setResettingSpark] = useState(false)
+  const [resettingIgnite, setResettingIgnite] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -127,6 +129,71 @@ export default function App() {
     }
   }
 
+  const resetIgnite = async () => {
+    setControlError(null)
+    setResettingIgnite(true)
+    try {
+      const { data: userMatches, error: matchError } = await supabase
+        .from("matches")
+        .select("id")
+        .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+      if (matchError) throw matchError
+      const matchIds = (userMatches ?? []).map((m) => m.id)
+
+      if (matchIds.length > 0) {
+        const { error: reqDeleteError } = await supabase
+          .from("date_requests")
+          .delete()
+          .in("match_id", matchIds)
+        if (reqDeleteError) throw reqDeleteError
+
+        const { error: taskDeleteError } = await supabase
+          .from("friction_tasks")
+          .delete()
+          .in("match_id", matchIds)
+        if (taskDeleteError) throw taskDeleteError
+      }
+
+      const { error: statusError } = await supabase
+        .from("matches")
+        .update({ status: "sparked" })
+        .eq("status", "dating")
+        .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+      if (statusError) throw statusError
+    } catch (e) {
+      setControlError(e instanceof Error ? e.message : "Reset failed")
+    } finally {
+      setResettingIgnite(false)
+    }
+  }
+
+  const resetSpark = async () => {
+    setControlError(null)
+    setResettingSpark(true)
+    try {
+      const { data: userMatches, error: matchError } = await supabase
+        .from("matches")
+        .select("id")
+        .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+      if (matchError) throw matchError
+
+      for (const m of userMatches ?? []) {
+        const { data, error } = await supabase.rpc("reset_match_to_pending", {
+          p_match_id: m.id,
+        })
+        if (error) throw error
+        const parsed = Array.isArray(data) ? (data[0] ?? null) : data
+        if (parsed && typeof parsed === "object" && "ok" in parsed && (parsed as any).ok !== true) {
+          throw new Error("Reset failed")
+        }
+      }
+    } catch (e) {
+      setControlError(e instanceof Error ? e.message : "Reset failed")
+    } finally {
+      setResettingSpark(false)
+    }
+  }
+
   return (
     <div className="h-dvh overflow-hidden bg-gradient-to-b from-background to-muted/40">
       <div className="mx-auto flex h-full w-full max-w-6xl items-stretch overflow-hidden lg:gap-8 lg:px-6 lg:py-6">
@@ -149,8 +216,24 @@ export default function App() {
               >
                 {resettingDiscover ? "Resetting Discover..." : "Reset Discover"}
               </button>
+              <button
+                type="button"
+                onClick={() => void resetSpark()}
+                disabled={resettingSpark}
+                className="rounded-2xl border border-border/70 bg-card/50 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resettingSpark ? "Resetting Spark..." : "Reset Spark"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void resetIgnite()}
+                disabled={resettingIgnite}
+                className="rounded-2xl border border-border/70 bg-card/50 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resettingIgnite ? "Resetting Ignite..." : "Reset Ignite"}
+              </button>
               <p className="text-xs text-muted-foreground">
-                Shows all profiles again by clearing your swipe history.
+                Use Discover reset for swipes, Spark reset for Q/A flow, Ignite reset for date flow.
               </p>
               {controlError && (
                 <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-foreground/90">
@@ -169,8 +252,9 @@ export default function App() {
             {activeTab === "matches" && (
               <MatchesViewFlow
                 userId={userId}
-                onGoToChat={(matchId) => {
-                  setChatMatchId(matchId)
+                onGoToChat={() => {
+                  // UX: open chat tab list first, do not jump directly into one thread.
+                  setChatMatchId(null)
                   setActiveTab("chat")
                 }}
               />

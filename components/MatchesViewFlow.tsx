@@ -16,7 +16,7 @@ type MatchesResponse = {
   incoming_likes: Array<{ other: UserRow }>
   spark_pending: Array<{ match: MatchRow; other: UserRow }>
   waiting_on_them: Array<{ other: UserRow; stage: "like" | "spark" }>
-  sparked: Array<{ match: MatchRow; other: UserRow }>
+  sparked: Array<{ match: MatchRow; other: UserRow; bothAnswered: boolean }>
 }
 
 const getOtherUserId = (m: MatchRow, userId: string) => (m.user_a === userId ? m.user_b : m.user_a)
@@ -34,10 +34,35 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   const [sparkError, setSparkError] = useState<string | null>(null)
   const [sparkRevealProfile, setSparkRevealProfile] = useState<SparkRevealProfile | null>(null)
   const [sparkRevealMatchId, setSparkRevealMatchId] = useState<string | null>(null)
+  const [seenSparkRevealIds, setSeenSparkRevealIds] = useState<Set<string>>(new Set())
   const canSubmit = useMemo(() => answer.trim().length >= SPARK_MIN_CHARS && answer.trim().length <= SPARK_MAX_CHARS, [answer])
+  const sparkRevealSeenKey = useMemo(() => `spark-reveal-seen:${userId}`, [userId])
 
-  const refresh = async () => {
-    setLoading(true)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(sparkRevealSeenKey)
+      const parsed = raw ? (JSON.parse(raw) as string[]) : []
+      setSeenSparkRevealIds(new Set(parsed))
+    } catch {
+      setSeenSparkRevealIds(new Set())
+    }
+  }, [sparkRevealSeenKey])
+
+  const markSparkRevealSeen = (matchId: string) => {
+    setSeenSparkRevealIds((prev) => {
+      const next = new Set(prev)
+      next.add(matchId)
+      try {
+        localStorage.setItem(sparkRevealSeenKey, JSON.stringify(Array.from(next)))
+      } catch {
+        // non-blocking
+      }
+      return next
+    })
+  }
+
+  const refresh = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const { data: me } = await supabase.from("users").select("display_name").eq("id", userId).maybeSingle()
@@ -76,7 +101,10 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         if (!other) return
         const myAnswer = Boolean(answerKey.get(`${m.id}:${userId}`)?.answer)
         const theirAnswer = Boolean(answerKey.get(`${m.id}:${other.id}`)?.answer)
-        if ((myAnswer && theirAnswer) || m.status === "sparked" || m.status === "dating") next.sparked.push({ match: m, other })
+        const bothAnswered = myAnswer && theirAnswer
+        if (bothAnswered || m.status === "sparked" || m.status === "dating") {
+          next.sparked.push({ match: m, other, bothAnswered })
+        }
         else if (!myAnswer) next.spark_pending.push({ match: m, other })
         else next.waiting_on_them.push({ other, stage: "spark" })
       })
@@ -86,12 +114,59 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
       setError(e instanceof Error ? e.message : "Failed to load matches")
       setData(null)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
     void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  useEffect(() => {
+    const matchesChannel = supabase
+      .channel(`matches:live:${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "matches" },
+        () => {
+          void refresh({ silent: true })
+        },
+      )
+      .subscribe()
+
+    const likesChannel = supabase
+      .channel(`likes:live:${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "likes" },
+        () => {
+          void refresh({ silent: true })
+        },
+      )
+      .subscribe()
+
+    const sparkAnswersChannel = supabase
+      .channel(`spark_answers:live:${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "spark_answers" },
+        () => {
+          void refresh({ silent: true })
+        },
+      )
+      .subscribe()
+
+    const poll = window.setInterval(() => {
+      void refresh({ silent: true })
+    }, 2500)
+
+    return () => {
+      supabase.removeChannel(matchesChannel)
+      supabase.removeChannel(likesChannel)
+      supabase.removeChannel(sparkAnswersChannel)
+      window.clearInterval(poll)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
@@ -245,7 +320,23 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                 data.sparked.map((r) => (
                   <div key={r.match.id} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 last:mb-0">
                     <span>{r.other.display_name ?? "Unknown"}</span>
-                    <button className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary" onClick={() => onGoToChat?.(r.match.id)}>Go to chat</button>
+                    {r.bothAnswered && !seenSparkRevealIds.has(r.match.id) ? (
+                      <button
+                        className="rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
+                        onClick={() => {
+                          setSparkRevealMatchId(r.match.id)
+                          setSparkRevealProfile({
+                            name: r.other.display_name ?? "Your match",
+                            bio: r.other.bio ?? "Your connection is unlocked. Start the conversation.",
+                            photos: r.other.avatar_url ? [r.other.avatar_url] : [],
+                          })
+                        }}
+                      >
+                        See spark
+                      </button>
+                    ) : (
+                      <button className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary" onClick={() => onGoToChat?.(r.match.id)}>Go to chat</button>
+                    )}
                   </div>
                 ))
               )}
@@ -266,7 +357,19 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         </div>
       )}
 
-      {sparkRevealProfile && sparkRevealMatchId && <SparkReveal currentUserName={currentUserName} matchedProfile={sparkRevealProfile} onComplete={() => { const matchId = sparkRevealMatchId; setSparkRevealProfile(null); setSparkRevealMatchId(null); onGoToChat?.(matchId) }} />}
+      {sparkRevealProfile && sparkRevealMatchId && (
+        <SparkReveal
+          currentUserName={currentUserName}
+          matchedProfile={sparkRevealProfile}
+          onComplete={() => {
+            const matchId = sparkRevealMatchId
+            markSparkRevealSeen(matchId)
+            setSparkRevealProfile(null)
+            setSparkRevealMatchId(null)
+            onGoToChat?.(matchId)
+          }}
+        />
+      )}
     </div>
   )
 }

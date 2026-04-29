@@ -1,15 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { MessageCircle, MoreHorizontal, RotateCcw, Sparkles } from "lucide-react"
+import { MessageCircle, Sparkles } from "lucide-react"
 import { supabase } from "@/src/supabase"
 import { ChatConversation } from "@/components/ChatConversation"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 type MatchStatus = "pending" | "sparked" | "dating"
 
@@ -55,7 +49,18 @@ export function ChatView({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(initialMatchId ?? null)
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<SparkedChatRow[]>([])
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [seenSparkRevealIds, setSeenSparkRevealIds] = useState<Set<string>>(new Set())
+  const sparkRevealSeenKey = useMemo(() => `spark-reveal-seen:${userId}`, [userId])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(sparkRevealSeenKey)
+      const parsed = raw ? (JSON.parse(raw) as string[]) : []
+      setSeenSparkRevealIds(new Set(parsed))
+    } catch {
+      setSeenSparkRevealIds(new Set())
+    }
+  }, [sparkRevealSeenKey])
 
   useEffect(() => {
     if (initialMatchId) setSelectedMatchId(initialMatchId)
@@ -113,7 +118,15 @@ export function ChatView({
         .filter((m) => {
           const a = answerByMatch.get(m.id)?.a ?? null
           const b = answerByMatch.get(m.id)?.b ?? null
-          return Boolean(a) && Boolean(b) // both spark answers exist
+          const bothAnswered = Boolean(a) && Boolean(b)
+          if (!bothAnswered) return false
+
+          // Buffer: chat list should only show after this user has viewed SparkReveal.
+          // But always allow the currently targeted match through so post-reveal navigation
+          // can open chat immediately without waiting on localStorage sync timing.
+          if (selectedMatchId && m.id === selectedMatchId) return true
+          const seen = seenSparkRevealIds.has(m.id)
+          return seen
         })
         .map((m) => {
           const otherId = getOtherUserId(m, userId)
@@ -141,40 +154,7 @@ export function ChatView({
   useEffect(() => {
     void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
-
-  const resetToPending = async (matchId: string) => {
-    setActionError(null)
-    try {
-      const { data, error } = await supabase.rpc("reset_match_to_pending", {
-        p_match_id: matchId,
-      })
-      if (error) throw error
-
-      const parse = (raw: unknown): any => {
-        if (raw == null) return null
-        if (Array.isArray(raw)) return raw[0] ?? null
-        if (typeof raw === "string") {
-          try {
-            return JSON.parse(raw)
-          } catch {
-            return { ok: false, raw }
-          }
-        }
-        return raw
-      }
-
-      const result = parse(data)
-      if (!result || result.ok !== true) {
-        throw new Error("Reset failed")
-      }
-
-      if (selectedMatchId === matchId) setSelectedMatchId(null)
-      await refresh()
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Reset failed")
-    }
-  }
+  }, [userId, seenSparkRevealIds, selectedMatchId])
 
   const selected = useMemo(() => {
     if (!selectedMatchId) return null
@@ -200,12 +180,6 @@ export function ChatView({
           <h1 className="text-2xl font-bold text-foreground">Messages</h1>
           <p className="mt-1 text-sm text-muted-foreground">Once both spark replies are in, chat opens.</p>
         </div>
-
-        {actionError && (
-          <div className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-foreground/90">
-            {actionError}
-          </div>
-        )}
 
         {loading && (
           <div className="space-y-2">
@@ -264,29 +238,6 @@ export function ChatView({
                     </span>
                   </button>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={`More options for ${row.other.display_name ?? "chat"}`}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => {
-                          void resetToPending(row.match.id)
-                        }}
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        Reset to pending
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               )
             })}

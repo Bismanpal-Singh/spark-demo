@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Flame, Send } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { supabase } from "@/src/supabase"
+import { IgniteConfirmSheet, IgniteDateFlow } from "@/components/IgniteDateFlow"
+import { selectTask, type TaskProfile } from "@/lib/tasks"
 
 type MatchStatus = "pending" | "sparked" | "dating"
 
@@ -36,6 +38,36 @@ type ChatMessageRow = {
   created_at: string
 }
 
+type DateRequestRow = {
+  id: string
+  match_id: string
+  requested_by: string
+  status: "pending" | "accepted" | "declined"
+}
+
+type FrictionTaskRow = {
+  id: string
+  match_id: string
+  task_key: string
+  user_a_response: string | null
+  user_b_response: string | null
+  status: "active" | "complete"
+}
+
+type ProfileTaskRow = {
+  id: string
+  display_name: string | null
+  city: string | null
+  preferences: string[] | null
+  avatar_url: string | null
+}
+
+type MeMini = {
+  id: string
+  display_name: string | null
+  avatar_url: string | null
+}
+
 function formatTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -63,6 +95,14 @@ export function ChatConversation({
   >([])
   const [error, setError] = useState<string | null>(null)
   const unlocked = true
+  const [dateRequest, setDateRequest] = useState<DateRequestRow | null>(null)
+  const [taskRow, setTaskRow] = useState<FrictionTaskRow | null>(null)
+  const [showIgniteSheet, setShowIgniteSheet] = useState(false)
+  const [showIgniteFlow, setShowIgniteFlow] = useState(false)
+  const [igniteFlowMode, setIgniteFlowMode] = useState<"intro" | "task">("intro")
+  const [meProfile, setMeProfile] = useState<MeMini>({ id: userId, display_name: "you", avatar_url: null })
+  const prevDateRequestStatusRef = useRef<DateRequestRow["status"] | undefined>(undefined)
+  const [lastCompletedRevealTaskId, setLastCompletedRevealTaskId] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -83,6 +123,15 @@ export function ChatConversation({
           timestamp: formatTime(m.created_at),
         })),
       )
+
+      await refreshDateAndTask()
+
+      const { data: meRow } = await supabase
+        .from("users")
+        .select("id,display_name,avatar_url")
+        .eq("id", userId)
+        .maybeSingle()
+      if (meRow) setMeProfile(meRow as MeMini)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load chat")
     } finally {
@@ -94,6 +143,31 @@ export function ChatConversation({
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match.id, userId])
+
+  useEffect(() => {
+    const currentStatus = dateRequest?.status
+    const wasAccepted = prevDateRequestStatusRef.current === "accepted"
+    prevDateRequestStatusRef.current = currentStatus
+
+    if (currentStatus !== "accepted" || wasAccepted) return
+    void (async () => {
+      try {
+        await ensureFrictionTask()
+      } catch {
+        // non-blocking
+      }
+      setIgniteFlowMode("intro")
+      setShowIgniteFlow(true)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRequest?.status])
+
+  useEffect(() => {
+    if (!taskRow || taskRow.status !== "complete" || showIgniteFlow) return
+    if (lastCompletedRevealTaskId === taskRow.id) return
+    setIgniteFlowMode("task")
+    setShowIgniteFlow(true)
+  }, [taskRow, showIgniteFlow, lastCompletedRevealTaskId])
 
   useEffect(() => {
     // Realtime subscription for live chat messages.
@@ -124,12 +198,200 @@ export function ChatConversation({
       )
       .subscribe()
 
+    const dateRequestChannel = supabase
+      .channel(`date_requests:${match.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "date_requests",
+          filter: `match_id=eq.${match.id}`,
+        },
+        async () => {
+          await refreshDateAndTask()
+        },
+      )
+      .subscribe()
+
+    const frictionChannel = supabase
+      .channel(`friction_tasks:${match.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "friction_tasks",
+          filter: `match_id=eq.${match.id}`,
+        },
+        async () => {
+          await refreshDateAndTask()
+        },
+      )
+      .subscribe()
+
+    const poll = window.setInterval(() => {
+      void refreshDateAndTask()
+    }, 3000)
+
     return () => {
       supabase.removeChannel(channel)
+      supabase.removeChannel(dateRequestChannel)
+      supabase.removeChannel(frictionChannel)
+      window.clearInterval(poll)
     }
   }, [match.id, userId])
 
   const [newMessage, setNewMessage] = useState("")
+
+  const isRequester = dateRequest?.requested_by === userId
+  const requestPending = dateRequest?.status === "pending"
+  const incomingPending = requestPending && !isRequester
+
+  const refreshDateAndTask = async () => {
+    const { data: requestRow } = await supabase
+      .from("date_requests")
+      .select("id,match_id,requested_by,status")
+      .eq("match_id", match.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setDateRequest((requestRow as DateRequestRow | null) ?? null)
+
+    const { data: friction } = await supabase
+      .from("friction_tasks")
+      .select("id,match_id,task_key,user_a_response,user_b_response,status")
+      .eq("match_id", match.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setTaskRow((friction as FrictionTaskRow | null) ?? null)
+  }
+
+  const ensureFrictionTask = async () => {
+    if (taskRow) return taskRow
+
+    const { data: profiles } = await supabase
+      .from("users")
+      .select("id,display_name,city,preferences,avatar_url")
+      .in("id", [match.user_a, match.user_b])
+
+    const profileMap = new Map<string, ProfileTaskRow>()
+    ;((profiles ?? []) as ProfileTaskRow[]).forEach((p) => profileMap.set(p.id, p))
+    const a = profileMap.get(match.user_a)
+    const b = profileMap.get(match.user_b)
+    if (!a || !b) return null
+
+    const aTask: TaskProfile = {
+      id: a.id,
+      displayName: a.display_name ?? "A",
+      city: a.city,
+      interests: (a.preferences ?? []).filter(Boolean),
+    }
+    const bTask: TaskProfile = {
+      id: b.id,
+      displayName: b.display_name ?? "B",
+      city: b.city,
+      interests: (b.preferences ?? []).filter(Boolean),
+    }
+    const selected = selectTask(aTask, bTask, match.id)
+
+    const payload = {
+      match_id: match.id,
+      task_key: selected.key,
+      status: "active" as const,
+      user_a_response: null,
+      user_b_response: null,
+    }
+    const { data: inserted, error } = await supabase
+      .from("friction_tasks")
+      .insert(payload)
+      .select("id,match_id,task_key,user_a_response,user_b_response,status")
+      .single()
+    if (error) throw error
+    const row = inserted as FrictionTaskRow
+    setTaskRow(row)
+    return row
+  }
+
+  const triggerIgnite = async () => {
+    setError(null)
+    try {
+      const payload = {
+        match_id: match.id,
+        requested_by: userId,
+        status: "pending" as const,
+      }
+      const { error: upsertError } = await supabase
+        .from("date_requests")
+        .upsert(payload, { onConflict: "match_id" })
+      if (upsertError) throw upsertError
+      setDateRequest({ id: "temp", ...payload })
+      setShowIgniteSheet(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to ignite date request")
+    }
+  }
+
+  const acceptIncomingRequest = async () => {
+    if (!dateRequest) return
+    setError(null)
+    try {
+      const { error: updateError } = await supabase
+        .from("date_requests")
+        .update({ status: "accepted" })
+        .eq("id", dateRequest.id)
+      if (updateError) throw updateError
+      await supabase.from("matches").update({ status: "dating" }).eq("id", match.id)
+      await ensureFrictionTask()
+      setShowIgniteFlow(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to accept request")
+    }
+  }
+
+  const declineIncomingRequest = async () => {
+    if (!dateRequest) return
+    setError(null)
+    try {
+      const { error: updateError } = await supabase
+        .from("date_requests")
+        .update({ status: "declined" })
+        .eq("id", dateRequest.id)
+      if (updateError) throw updateError
+      setDateRequest({ ...dateRequest, status: "declined" })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to decline request")
+    }
+  }
+
+  const submitTaskResponse = async (response: string) => {
+    if (!taskRow) return { bothAnswered: false }
+    const patch = iAmA ? { user_a_response: response } : { user_b_response: response }
+    const { error: updateError } = await supabase.from("friction_tasks").update(patch).eq("id", taskRow.id)
+    if (updateError) throw updateError
+
+    const { data: fresh } = await supabase
+      .from("friction_tasks")
+      .select("id,match_id,task_key,user_a_response,user_b_response,status")
+      .eq("id", taskRow.id)
+      .single()
+    const row = fresh as FrictionTaskRow
+    if (row.user_a_response && row.user_b_response && row.status !== "complete") {
+      await supabase.from("friction_tasks").update({ status: "complete" }).eq("id", row.id)
+      row.status = "complete"
+    }
+    setTaskRow(row)
+    return { bothAnswered: Boolean(row.user_a_response && row.user_b_response) }
+  }
+
+  const closeIgniteFlow = () => {
+    if (taskRow?.status === "complete") {
+      setLastCompletedRevealTaskId(taskRow.id)
+    }
+    setShowIgniteFlow(false)
+  }
+
   const sendMessage = async () => {
     const trimmed = newMessage.trim()
     if (!trimmed || !unlocked) return
@@ -183,11 +445,27 @@ export function ChatConversation({
           </div>
 
           <button
-            onClick={() => void 0}
-            className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-amber-600 active:scale-95"
+            onClick={() => {
+              if (requestPending && isRequester) {
+                setIgniteFlowMode("task")
+                setShowIgniteFlow(true)
+                return
+              }
+              if (dateRequest?.status === "accepted") {
+                setIgniteFlowMode("task")
+                setShowIgniteFlow(true)
+                return
+              }
+              setShowIgniteSheet(true)
+            }}
+            className="flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[12px] tracking-[0.04em] text-amber-400 transition-all duration-200 ease-out hover:border-amber-400/30 hover:bg-amber-400/15"
           >
-            <Flame className="h-3.5 w-3.5" />
-            Ignite
+            <Flame className="h-4 w-4 text-amber-400" />
+            {requestPending && isRequester
+              ? "request sent"
+              : dateRequest?.status === "accepted"
+                ? "view plan"
+                : "ignite a date"}
           </button>
         </div>
       </header>
@@ -238,6 +516,50 @@ export function ChatConversation({
             <div className="rounded-2xl border border-white/10 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
               <div className="h-4 w-3/5 animate-pulse rounded bg-muted" />
               <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-muted/80" />
+            </div>
+          )}
+
+          {requestPending && isRequester && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="ml-auto w-fit max-w-[78%] rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]"
+            >
+              <div className="flex items-start gap-2">
+                <Flame className="mt-0.5 h-3.5 w-3.5 text-amber-400" />
+                <div>
+                  <div className="text-[12px] tracking-[0.04em] text-amber-400">date request sent</div>
+                  <div className="text-[11px] text-white/30">waiting for them to respond</div>
+                </div>
+              </div>
+              <div className="mt-2 h-px w-full animate-pulse bg-amber-400/40" />
+            </motion.div>
+          )}
+
+          {incomingPending && (
+            <div className="mx-4 rounded-2xl border border-amber-400/25 bg-[#161616] p-5 shadow-[0_0_40px_rgba(251,146,60,0.08)]">
+              <div className="mb-2 flex justify-center">
+                <Flame className="h-5 w-5 text-amber-400" />
+              </div>
+              <div className="text-center text-sm font-medium text-white">
+                {(other.display_name ?? "they").toLowerCase()} wants to ignite a date
+              </div>
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => void acceptIncomingRequest()}
+                  className="h-11 w-full rounded-xl bg-amber-400 text-sm font-medium text-black"
+                >
+                  i'm in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void declineIncomingRequest()}
+                  className="h-11 w-full rounded-xl border border-white/25 bg-transparent text-sm text-white/50"
+                >
+                  not yet
+                </button>
+              </div>
             </div>
           )}
 
@@ -297,6 +619,25 @@ export function ChatConversation({
           </button>
         </div>
       </div>
+
+      <IgniteConfirmSheet
+        open={showIgniteSheet}
+        name={other.display_name ?? "them"}
+        avatarUrl={other.avatar_url}
+        onClose={() => setShowIgniteSheet(false)}
+        onIgnite={() => void triggerIgnite()}
+      />
+
+      <IgniteDateFlow
+        open={showIgniteFlow}
+        match={{ id: match.id, user_a: match.user_a, user_b: match.user_b }}
+        me={meProfile}
+        other={other}
+        task={taskRow}
+        mode={igniteFlowMode}
+        onClose={closeIgniteFlow}
+        onSubmitResponse={submitTaskResponse}
+      />
     </div>
   )
 }
