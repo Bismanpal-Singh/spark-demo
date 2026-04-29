@@ -52,3 +52,20 @@
 - Rationale:
   - Avoids race conditions and unclear "both accepted" logic.
   - Makes transitions to friction task unlock deterministic.
+
+## D-006: Local Mock Backend for Match State (File-backed)
+- Date: 2026-04-28
+- Status: Accepted (MVP)
+- Decision:
+  - Use a minimal file-backed JSON “DB” for persisted match state during the take-home demo instead of Supabase.
+  - Implement local API endpoints on the Vite dev server:
+    - `GET /api/me/matches` returns categorized matches.
+    - `POST /api/me/matches/:id/reply-spark` updates a match from `waiting_for_my_spark` to `sparked`.
+    - `POST /api/me/reset` resets the local DB for fast demos.
+  - Update `MatchesView` to fetch from the API and re-render UI based on real state transitions.
+- Rationale:
+  - Keeps scope small while still demonstrating clean engineering (data boundary + API layer + persistence).
+  - Enables a credible “spark pending -> sparked” lifecycle without auth/real DB setup.
+- Risks:
+  - File-backed storage is not concurrency-safe (acceptable for a demo).
+  - No authorization/RLS (intentionally deferred for assignment scope).

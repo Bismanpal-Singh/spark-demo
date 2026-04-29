@@ -1,0 +1,25 @@
+{
+  "matches": [
+    {
+      "id": "m1",
+      "name": "Sarah",
+      "photo": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop",
+      "status": "waiting_for_their_match",
+      "lastActivity": "You liked them 2h ago"
+    },
+    {
+      "id": "m2",
+      "name": "Maya",
+      "photo": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
+      "status": "waiting_for_my_spark",
+      "lastActivity": "Matched - waiting for your spark reply"
+    },
+    {
+      "id": "m3",
+      "name": "Jessica",
+      "photo": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop",
+      "status": "sparked",
+      "lastActivity": "Spark complete"
+    }
+  ]
+}
