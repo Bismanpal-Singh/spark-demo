@@ -1,5 +1,4 @@
-// Daily spark question bank.
-// We keep this deterministic (no DB) so both parties get the same question on a given day.
+// Spark question bank.
 
 export const sparkQuestions: string[] = [
   // Revealing without being heavy
@@ -73,5 +72,21 @@ export function getTodaysQuestionIndex(): number {
 
 export function getTodaysQuestion(): string {
   return sparkQuestions[getTodaysQuestionIndex()]
+}
+
+function hashString(input: string): number {
+  let hash = 0
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0
+  }
+  return hash
+}
+
+// Stable question per match so both participants see the same prompt,
+// while different matches get different questions.
+export function getQuestionForMatch(matchId: string): string {
+  if (!matchId) return getTodaysQuestion()
+  const index = hashString(matchId) % sparkQuestions.length
+  return sparkQuestions[index]
 }
 

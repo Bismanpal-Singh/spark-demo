@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Flame, Heart, Sparkles, X } from "lucide-react"
 import { supabase } from "@/src/supabase"
-import { getTodaysQuestion } from "@/lib/questions"
+import { getQuestionForMatch } from "@/lib/questions"
 import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "../lib/sparkRules"
 import { SparkReveal, type SparkRevealProfile } from "@/components/SparkReveal"
 
@@ -15,7 +15,7 @@ type SparkAnswerRow = { match_id: string; user_id: string; answer: string }
 type MatchesResponse = {
   incoming_likes: Array<{ other: UserRow }>
   spark_pending: Array<{ match: MatchRow; other: UserRow }>
-  waiting_on_them: Array<{ other: UserRow }>
+  waiting_on_them: Array<{ other: UserRow; stage: "like" | "spark" }>
   sparked: Array<{ match: MatchRow; other: UserRow }>
 }
 
@@ -68,7 +68,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         const other = userById.get(otherId)
         if (!other || matchedUsers.has(otherId) || l.status !== "pending") return
         if (l.to_user_id === userId) next.incoming_likes.push({ other })
-        else next.waiting_on_them.push({ other })
+        else next.waiting_on_them.push({ other, stage: "like" })
       })
 
       matchRows.forEach((m) => {
@@ -78,7 +78,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         const theirAnswer = Boolean(answerKey.get(`${m.id}:${other.id}`)?.answer)
         if ((myAnswer && theirAnswer) || m.status === "sparked" || m.status === "dating") next.sparked.push({ match: m, other })
         else if (!myAnswer) next.spark_pending.push({ match: m, other })
-        else next.waiting_on_them.push({ other })
+        else next.waiting_on_them.push({ other, stage: "spark" })
       })
 
       setData(next)
@@ -106,7 +106,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   const openSparkPrompt = async (matchId: string) => {
     setSparkOpen(true)
     setSparkMatchId(matchId)
-    setSparkQuestion(getTodaysQuestion())
+    setSparkQuestion(getQuestionForMatch(matchId))
     const { data: existing } = await supabase.from("spark_answers").select("answer").eq("match_id", matchId).eq("user_id", userId).maybeSingle()
     setAnswer(existing?.answer ?? "")
   }
@@ -212,7 +212,20 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                 <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-3 text-sm text-muted-foreground">No pending responses.</div>
               ) : (
                 data.waiting_on_them.map((r) => (
-                  <div key={r.other.id} className="mb-2 rounded-xl bg-card p-3 text-muted-foreground last:mb-0">{r.other.display_name ?? "Unknown"}</div>
+                  <div key={`${r.other.id}-${r.stage}`} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 text-muted-foreground last:mb-0">
+                    <span>{r.other.display_name ?? "Unknown"}</span>
+                    {r.stage === "spark" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[11px] font-medium text-amber-100/90">
+                        <Flame className="h-3.5 w-3.5 fill-amber-300/80 text-amber-300" />
+                        Spark sent
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/25 bg-rose-300/10 px-2.5 py-1 text-[11px] font-medium text-rose-100/90">
+                        <Heart className="h-3.5 w-3.5 fill-rose-300/80 text-rose-300" />
+                        Like sent
+                      </span>
+                    )}
+                  </div>
                 ))
               )}
             </section>
