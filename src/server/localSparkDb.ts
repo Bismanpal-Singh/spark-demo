@@ -7,6 +7,8 @@ export type MatchStatus =
   | "waiting_for_my_spark"
   | "sparked"
 
+export type Viewer = "a" | "b"
+
 export type LocalMatch = {
   id: string
   name: string
@@ -49,8 +51,8 @@ const defaultDb: SparkDb = {
       lastActivity: "Matched - waiting for your spark reply",
       sparkQuestion: getTodaysQuestion(),
       myAnswer: null,
-      // For demo: pre-fill their answer so we only need the user's input to unlock.
-      theirAnswer: "Their spark answer (demo)",
+      // Both answers start empty so Account A and Account B can "reply" separately.
+      theirAnswer: null,
     },
     {
       id: "m3",
@@ -74,15 +76,11 @@ function normalizeMatch(input: LocalMatch): LocalMatch {
     input.sparkQuestion ??
     (status === "waiting_for_my_spark" || status === "sparked" ? q : null)
 
-  const myAnswer =
-    input.myAnswer ??
-    (status === "sparked" ? "My spark answer (demo)" : null)
+  // Only seed answers for already-sparked demo matches.
+  const myAnswer = input.myAnswer ?? (status === "sparked" ? "My spark answer (demo)" : null)
 
   const theirAnswer =
-    input.theirAnswer ??
-    (status === "sparked" || status === "waiting_for_my_spark"
-      ? "Their spark answer (demo)"
-      : null)
+    input.theirAnswer ?? (status === "sparked" ? "Their spark answer (demo)" : null)
 
   return {
     ...input,
@@ -115,24 +113,81 @@ export function resetDb() {
   writeDbSync(defaultDb)
 }
 
-export function getMatchesByStatus() {
-  const db = readDbSync()
+function getViewerAnswers(match: LocalMatch, viewer: Viewer) {
+  if (viewer === "a") {
+    return {
+      myAnswer: match.myAnswer ?? null,
+      theirAnswer: match.theirAnswer ?? null,
+    }
+  }
 
   return {
-    waiting_for_their_match: db.matches.filter(
-      (m) => m.status === "waiting_for_their_match",
-    ),
-    waiting_for_my_spark: db.matches.filter((m) => m.status === "waiting_for_my_spark"),
-    sparked: db.matches.filter((m) => m.status === "sparked"),
+    myAnswer: match.theirAnswer ?? null,
+    theirAnswer: match.myAnswer ?? null,
   }
 }
 
-export function getSparkQuestionForMatch(matchId: string) {
+export function getMatchesByStatus(viewer: Viewer = "a") {
+  const db = readDbSync()
+
+  const waiting_for_their_match: LocalMatch[] = []
+  const waiting_for_my_spark: LocalMatch[] = []
+  const sparked: LocalMatch[] = []
+
+  for (const m of db.matches) {
+    const sparkQuestion = m.sparkQuestion ?? null
+    const { myAnswer, theirAnswer } = getViewerAnswers(m, viewer)
+
+    // Pre-spark matches (only one photo shown, no spark data yet).
+    const isSparkMatch = Boolean(sparkQuestion) || myAnswer !== null || theirAnswer !== null
+
+    if (!isSparkMatch) {
+      // For demo: keep pre-spark category the same for both viewers.
+      waiting_for_their_match.push(m)
+      continue
+    }
+
+    if (myAnswer === null) {
+      waiting_for_my_spark.push({
+        ...m,
+        status: "waiting_for_my_spark",
+        myAnswer,
+        theirAnswer,
+        lastActivity: "Matched - waiting for your spark reply",
+      })
+      continue
+    }
+
+    if (theirAnswer === null) {
+      waiting_for_their_match.push({
+        ...m,
+        status: "waiting_for_their_match",
+        myAnswer,
+        theirAnswer,
+        lastActivity: "Matched - waiting for their spark reply",
+      })
+      continue
+    }
+
+    sparked.push({
+      ...m,
+      status: "sparked",
+      myAnswer,
+      theirAnswer,
+      lastActivity: "Spark complete",
+    })
+  }
+
+  return { waiting_for_their_match, waiting_for_my_spark, sparked }
+}
+
+export function getSparkQuestionForMatch(matchId: string, viewer: Viewer = "a") {
   const db = readDbSync()
   const match = db.matches.find((m) => m.id === matchId)
   if (!match) return { ok: false as const, error: "not_found" as const }
 
-  if (match.status !== "waiting_for_my_spark" && match.status !== "sparked") {
+  const { myAnswer, theirAnswer } = getViewerAnswers(match, viewer)
+  if (myAnswer !== null) {
     return { ok: false as const, error: "invalid_status" as const }
   }
 
@@ -142,23 +197,23 @@ export function getSparkQuestionForMatch(matchId: string) {
     question,
     maxChars: SPARK_MAX_CHARS,
     minChars: SPARK_MIN_CHARS,
-    myAnswer: match.myAnswer ?? null,
-    theirAnswer: match.theirAnswer ?? null,
+    myAnswer,
+    theirAnswer,
   }
 }
 
-export function replySpark(matchId: string, answer: string) {
+export function replySpark(
+  matchId: string,
+  viewer: Viewer,
+  answer: string,
+) {
   const db = readDbSync()
   const match = db.matches.find((m) => m.id === matchId)
   if (!match) return { ok: false as const, error: "not_found" as const }
 
-  // Only allow replying when the user is the one who hasn't replied yet.
-  if (match.status !== "waiting_for_my_spark") {
-    return {
-      ok: false as const,
-      error: "invalid_status" as const,
-    }
-  }
+  const { myAnswer } = getViewerAnswers(match, viewer)
+  // Only allow replying when the viewer hasn't replied yet.
+  if (myAnswer !== null) return { ok: false as const, error: "invalid_status" as const }
 
   const trimmed = answer.trim()
   if (trimmed.length < SPARK_MIN_CHARS) {
@@ -168,12 +223,15 @@ export function replySpark(matchId: string, answer: string) {
     return { ok: false as const, error: "too_long" as const }
   }
 
-  match.myAnswer = trimmed
-  // For demo: if we somehow don't have their answer yet, seed it.
-  if (!match.theirAnswer) match.theirAnswer = "Their spark answer (demo)"
+  if (viewer === "a") match.myAnswer = trimmed
+  else match.theirAnswer = trimmed
 
-  match.status = "sparked"
-  match.lastActivity = "Spark complete"
+  const { myAnswer: afterMy, theirAnswer: afterTheir } = getViewerAnswers(match, viewer)
+
+  match.status = afterMy && afterTheir ? "sparked" : match.status
+  match.lastActivity =
+    match.myAnswer && match.theirAnswer ? "Spark complete" : "Matched - waiting for their spark reply"
+
   writeDbSync(db)
   return { ok: true as const }
 }

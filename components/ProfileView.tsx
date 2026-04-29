@@ -3,16 +3,40 @@
 import { Camera, Edit3, MapPin, Settings } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-const currentUser = {
-  name: "Alex",
-  age: 28,
-  bio: "Software engineer who loves hiking, photography, and finding the best coffee spots in the city. Looking for genuine connections and meaningful conversations.",
-  city: "San Francisco",
-  interests: ["Hiking", "Photography", "Coffee", "Tech", "Travel", "Music"],
-  photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=500&fit=crop",
+const profiles: Record<
+  "a" | "b",
+  {
+    name: string
+    age: number
+    bio: string
+    city: string
+    interests: string[]
+    photo: string
+  }
+> = {
+  a: {
+    name: "Alex",
+    age: 28,
+    bio: "Software engineer who loves hiking, photography, and finding the best coffee spots in the city. Looking for genuine connections and meaningful conversations.",
+    city: "San Francisco",
+    interests: ["Hiking", "Photography", "Coffee", "Tech", "Travel", "Music"],
+    photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=500&fit=crop",
+  },
+  b: {
+    // Account B is intentionally female for the 2-account simulation.
+    // This also matches the “Maya” match entry in the spark backend.
+    name: "Maya",
+    age: 27,
+    bio: "Big on cozy plans, spontaneous road trips, and small adventures that turn into great stories. I love conversations that feel real from the first message.",
+    city: "San Francisco",
+    interests: ["Coffee", "Road trips", "Hiking", "Music", "Photography", "Cooking"],
+    photo: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=500&fit=crop",
+  },
 }
 
-export function ProfileView() {
+export function ProfileView({ viewer }: { viewer: "a" | "b" }) {
+  const currentUser = profiles[viewer]
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-6 pt-4">

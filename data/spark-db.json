@@ -14,11 +14,11 @@
       "id": "m2",
       "name": "Maya",
       "photo": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
-      "status": "sparked",
-      "lastActivity": "Spark complete",
+      "status": "waiting_for_my_spark",
+      "lastActivity": "Matched - waiting for your spark reply",
       "sparkQuestion": "What's something small you do that you think says a lot about who you are?",
-      "myAnswer": "hello",
-      "theirAnswer": "Their spark answer (demo)"
+      "myAnswer": null,
+      "theirAnswer": null
     },
     {
       "id": "m3",

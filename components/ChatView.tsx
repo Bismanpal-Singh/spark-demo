@@ -40,7 +40,7 @@ const mockChats: ChatPreview[] = [
   },
 ]
 
-export function ChatView() {
+export function ChatView({ viewer }: { viewer: "a" | "b" }) {
   const [selectedChat, setSelectedChat] = useState<ChatPreview | null>(null)
   const [pinnedSpark, setPinnedSpark] = useState<{
     myAnswer?: string | null
@@ -50,7 +50,7 @@ export function ChatView() {
   useEffect(() => {
     const loadPinnedSpark = async () => {
       try {
-        const res = await fetch("/api/me/matches")
+        const res = await fetch(`/api/me/matches?viewer=${viewer}`)
         if (!res.ok) return
         const json = (await res.json()) as {
           sparked: Array<{
@@ -71,7 +71,7 @@ export function ChatView() {
     }
 
     void loadPinnedSpark()
-  }, [])
+  }, [viewer])
 
   if (selectedChat) {
     return (

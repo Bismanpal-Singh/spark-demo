@@ -32,7 +32,13 @@ type SparkQuestionResponse = {
   error?: string
 }
 
-export function MatchesView({ onGoToChat }: { onGoToChat?: () => void }) {
+export function MatchesView({
+  onGoToChat,
+  viewer,
+}: {
+  onGoToChat?: () => void
+  viewer: "a" | "b"
+}) {
   const [data, setData] = useState<MatchesApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +48,9 @@ export function MatchesView({ onGoToChat }: { onGoToChat?: () => void }) {
     setError(null)
 
     try {
-      const res = await fetch("/api/me/matches", { method: "GET" })
+      const res = await fetch(`/api/me/matches?viewer=${viewer}`, {
+        method: "GET",
+      })
       if (!res.ok) throw new Error(`Failed to load matches (${res.status})`)
 
       const json = (await res.json()) as MatchesApiResponse
@@ -56,7 +64,7 @@ export function MatchesView({ onGoToChat }: { onGoToChat?: () => void }) {
 
   useEffect(() => {
     void fetchMatches()
-  }, [])
+  }, [viewer])
 
   // Spark modal state
   const [sparkOpen, setSparkOpen] = useState(false)
@@ -80,9 +88,10 @@ export function MatchesView({ onGoToChat }: { onGoToChat?: () => void }) {
     setSparkLoading(true)
 
     try {
-      const res = await fetch(`/api/me/matches/${matchId}/spark-question`, {
-        method: "GET",
-      })
+      const res = await fetch(
+        `/api/me/matches/${matchId}/spark-question?viewer=${viewer}`,
+        { method: "GET" },
+      )
       if (!res.ok) throw new Error(`Failed to load spark question (${res.status})`)
 
       const json = (await res.json()) as SparkQuestionResponse
@@ -122,11 +131,14 @@ export function MatchesView({ onGoToChat }: { onGoToChat?: () => void }) {
     }
 
     try {
-      const res = await fetch(`/api/me/matches/${sparkMatchId}/reply-spark`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answer: trimmed }),
-      })
+      const res = await fetch(
+        `/api/me/matches/${sparkMatchId}/reply-spark?viewer=${viewer}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ answer: trimmed }),
+        },
+      )
       const json = (await res.json()) as { ok?: boolean; error?: string }
       if (!res.ok || !json.ok) {
         throw new Error(json.error ? String(json.error) : "Reply failed")

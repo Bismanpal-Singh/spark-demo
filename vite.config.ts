@@ -34,9 +34,12 @@ export default defineConfig({
           // Only handle local API paths.
           if (!url.pathname.startsWith("/api/")) return next()
 
+          const viewerParam = url.searchParams.get("viewer")
+          const viewer = viewerParam === "b" ? "b" : "a"
+
           if (req.method === "GET" && url.pathname === "/api/me/matches") {
             res.setHeader("content-type", "application/json; charset=utf-8")
-            res.end(JSON.stringify(getMatchesByStatus()))
+            res.end(JSON.stringify(getMatchesByStatus(viewer)))
             return
           }
 
@@ -52,7 +55,7 @@ export default defineConfig({
           )
           if (req.method === "GET" && sparkQuestionMatch) {
             const matchId = sparkQuestionMatch[1]
-            const result = getSparkQuestionForMatch(matchId)
+            const result = getSparkQuestionForMatch(matchId, viewer)
             res.setHeader("content-type", "application/json; charset=utf-8")
             res.end(JSON.stringify(result))
             return
@@ -68,7 +71,7 @@ export default defineConfig({
 
             const result =
               typeof answer === "string"
-                ? replySpark(matchId, answer)
+                ? replySpark(matchId, viewer, answer)
                 : { ok: false as const, error: "missing_answer" as const }
 
             res.setHeader("content-type", "application/json; charset=utf-8")
