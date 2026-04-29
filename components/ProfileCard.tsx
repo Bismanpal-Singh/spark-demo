@@ -17,6 +17,8 @@ export type DiscoverProfile = {
   lookingFor: string
   funFact: string
   unlocked: boolean
+  /** When locked: extra photos not shown on the card hero. */
+  lockedExtraPhotoCount?: number
 }
 
 interface ProfileCardProps {
@@ -221,6 +223,11 @@ export function ProfileCard({
                   >
                     <Lock className="mr-1 h-3 w-3" />
                     +{profile.allInterests.length - profile.previewInterests.length}
+                  </Badge>
+                )}
+                {(profile.lockedExtraPhotoCount ?? 0) > 0 && (
+                  <Badge variant="secondary" className="bg-white/10 px-2 py-0.5 text-xs text-white/50">
+                    <Lock className="mr-1 h-3 w-3" />+{profile.lockedExtraPhotoCount} photos
                   </Badge>
                 )}
               </div>

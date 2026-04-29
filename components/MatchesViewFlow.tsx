@@ -7,21 +7,11 @@ import { supabase } from "@/src/supabase"
 import { getQuestionForMatch } from "@/lib/questions"
 import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "../lib/sparkRules"
 import { SparkReveal, type SparkRevealProfile } from "@/components/SparkReveal"
+import { incomingLikeLockedPreview, type RichUserRow } from "@/lib/profileVisibility"
 
 type MatchRow = { id: string; user_a: string; user_b: string; status: "pending" | "sparked" | "dating" }
 type LikeRow = { from_user_id: string; to_user_id: string; status: "pending" | "mutual" }
-type UserRow = {
-  id: string
-  display_name: string | null
-  avatar_url: string | null
-  bio?: string | null
-  age?: number | null
-  city?: string | null
-  preferences?: string[] | null
-  gallery_urls?: string[] | null
-  looking_for?: string | null
-  fun_fact?: string | null
-}
+type UserRow = RichUserRow
 type SparkAnswerRow = { match_id: string; user_id: string; answer: string }
 
 type MatchesResponse = {
@@ -32,7 +22,6 @@ type MatchesResponse = {
 }
 
 const getOtherUserId = (m: MatchRow, userId: string) => (m.user_a === userId ? m.user_b : m.user_a)
-const truncate = (text: string, max = 120) => (text.length <= max ? text : `${text.slice(0, max - 1)}...`)
 
 export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoToChat?: (matchId: string) => void }) {
   const [loading, setLoading] = useState(true)
@@ -52,6 +41,10 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   const [incomingActionLoading, setIncomingActionLoading] = useState<"accept" | "decline" | null>(null)
   const canSubmit = useMemo(() => answer.trim().length >= SPARK_MIN_CHARS && answer.trim().length <= SPARK_MAX_CHARS, [answer])
   const sparkRevealSeenKey = useMemo(() => `spark-reveal-seen:${userId}`, [userId])
+  const incomingLockedPreview = useMemo(
+    () => (incomingPreview ? incomingLikeLockedPreview(incomingPreview) : null),
+    [incomingPreview],
+  )
 
   useEffect(() => {
     try {
@@ -489,7 +482,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
       )}
 
       <AnimatePresence>
-        {incomingPreview && (
+        {incomingPreview && incomingLockedPreview && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -506,7 +499,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
             >
               <div className="relative h-full w-full">
                 <img
-                  src={(incomingPreview.gallery_urls ?? []).find(Boolean) ?? incomingPreview.avatar_url ?? ""}
+                  src={incomingLockedPreview.heroUrl}
                   alt={incomingPreview.display_name ?? "Profile"}
                   className="h-full w-full object-cover"
                 />
@@ -532,19 +525,22 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                     </div>
                   ) : null}
 
-                  <p className="mt-2 text-base leading-relaxed text-white/92">
-                    {incomingPreview.bio?.trim() ? truncate(incomingPreview.bio, 115) : "No bio added yet."}
-                  </p>
+                  <p className="mt-2 text-base leading-relaxed text-white/92">{incomingLockedPreview.previewBio}</p>
 
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {(incomingPreview.preferences ?? []).slice(0, 3).map((tag) => (
+                    {incomingLockedPreview.previewTags.map((tag) => (
                       <span key={tag} className="rounded-full bg-white/15 px-2.5 py-1 text-xs text-white">
                         {tag}
                       </span>
                     ))}
-                    {((incomingPreview.preferences ?? []).length || 0) > 3 ? (
+                    {incomingLockedPreview.hiddenTagCount > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/65">
-                        <Lock className="h-3 w-3" />+{(incomingPreview.preferences ?? []).length - 3}
+                        <Lock className="h-3 w-3" />+{incomingLockedPreview.hiddenTagCount}
+                      </span>
+                    ) : null}
+                    {incomingLockedPreview.hiddenPhotoCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/65">
+                        <Lock className="h-3 w-3" />+{incomingLockedPreview.hiddenPhotoCount} photos
                       </span>
                     ) : null}
                   </div>

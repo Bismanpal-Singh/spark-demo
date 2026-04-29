@@ -1,8 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ProfileCard, type DiscoverProfile } from "./ProfileCard"
+import { ProfileCard } from "./ProfileCard"
 import { supabase } from "@/src/supabase"
+import {
+  answersByMatchFromRows,
+  isOtherProfileUnlocked,
+  toDiscoverProfile,
+  type RichUserRow,
+} from "@/lib/profileVisibility"
 
 type MatchStatus = "pending" | "sparked" | "dating"
 type LikeStatus = "pending" | "mutual"
@@ -25,47 +31,7 @@ type LikeRow = {
   status: LikeStatus
 }
 
-type UserRow = {
-  id: string
-  display_name: string | null
-  age: number | null
-  city: string | null
-  bio: string | null
-  avatar_url: string | null
-  gallery_urls?: string[] | null
-  preferences?: string[] | null
-  looking_for?: string | null
-  fun_fact?: string | null
-}
-
-function truncate(text: string, max = 96) {
-  if (text.length <= max) return text
-  return `${text.slice(0, max - 1)}...`
-}
-
-function toDiscoverProfile(u: UserRow, unlocked: boolean): DiscoverProfile {
-  const fullBio = u.bio ?? "No bio yet."
-  const prefs = (u.preferences ?? []).filter(Boolean)
-  const previewInterests = prefs.slice(0, 3)
-  const allInterests = prefs.length > 0 ? prefs : ["Conversation", "Coffee", "Travel"]
-  const avatar = u.avatar_url ?? ""
-  const gallery = (u.gallery_urls ?? []).filter(Boolean)
-
-  return {
-    id: u.id,
-    name: u.display_name ?? "Unknown",
-    age: u.age ?? 0,
-    city: u.city ?? "Unknown",
-    photos: [avatar, ...gallery].filter(Boolean),
-    previewBio: truncate(fullBio, 95),
-    previewInterests,
-    fullBio,
-    allInterests,
-    lookingFor: u.looking_for ?? "Genuine connection",
-    funFact: u.fun_fact ?? "",
-    unlocked,
-  }
-}
+type UserRow = RichUserRow
 
 function DiscoverBrandHeader() {
   return (
@@ -142,25 +108,16 @@ export function DiscoverView({
               .in("match_id", matchIds)
           : { data: [] as SparkAnswerRow[] }
 
-      const answersByMatch = new Map<string, Set<string>>()
-      ;((answers ?? []) as SparkAnswerRow[]).forEach((a) => {
-        const set = answersByMatch.get(a.match_id) ?? new Set<string>()
-        set.add(a.user_id)
-        answersByMatch.set(a.match_id, set)
-      })
-
-      const unlockedByOtherUser = new Map<string, boolean>()
-      for (const m of matchRows) {
-        const otherId = m.user_a === userId ? m.user_b : m.user_a
-        const answered = answersByMatch.get(m.id) ?? new Set<string>()
-        const bothAnswered = answered.has(m.user_a) && answered.has(m.user_b)
-        const unlocked = bothAnswered || m.status === "sparked" || m.status === "dating"
-        unlockedByOtherUser.set(otherId, unlocked)
-      }
+      const answersByMatch = answersByMatchFromRows((answers ?? []) as SparkAnswerRow[])
 
       // Keep discover as "potential people": hide users you've already liked.
       const candidates = usersData.filter((u) => !outgoingLiked.has(u.id))
-      const computed = candidates.map((u) => toDiscoverProfile(u, Boolean(unlockedByOtherUser.get(u.id))))
+      const computed = candidates.map((u) =>
+        toDiscoverProfile(
+          u,
+          isOtherProfileUnlocked(userId, u.id, matchRows, answersByMatch),
+        ),
+      )
       setProfiles(computed)
       setCurrentIndex(0)
     } catch {
