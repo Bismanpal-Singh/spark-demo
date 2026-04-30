@@ -10,6 +10,7 @@ create table if not exists public.users (
   display_name text not null,
   age int,
   bio text,
+  tagline text,
   avatar_url text,
   city text,
   created_at timestamptz not null default now()

@@ -22,6 +22,9 @@ export const DISCOVER_PREVIEW_BIO_MAX = 95
 /** Max chars of bio in incoming-like preview (slightly longer for the sheet). */
 export const INCOMING_PREVIEW_BIO_MAX = 120
 
+/** Tagline is authored at this max length so locked UI never truncates it. */
+export const TAGLINE_MAX_CHARS = 100
+
 /** Tags shown when locked (Discover + incoming preview). */
 export const LOCKED_TAG_PREVIEW_COUNT = 3
 
@@ -38,6 +41,8 @@ export type RichUserRow = {
   display_name: string | null
   age?: number | null
   city?: string | null
+  /** Short line shown before unlock (Discover, incoming like). */
+  tagline?: string | null
   bio?: string | null
   avatar_url: string | null
   gallery_urls?: string[] | null
@@ -52,6 +57,19 @@ export function truncateBio(text: string, max: number): string {
   const t = text.trim()
   if (t.length <= max) return t
   return `${t.slice(0, max - 1)}…`
+}
+
+/** Locked previews: dedicated tagline (no truncation), else legacy truncated bio. */
+export function lockedPreviewBio(
+  user: RichUserRow,
+  variant: "discover" | "incoming" = "discover",
+): string {
+  const tag = user.tagline?.trim()
+  if (tag) return tag.slice(0, TAGLINE_MAX_CHARS)
+  const emptyLabel = variant === "incoming" ? "No bio added yet." : "No bio yet."
+  const fullBio = user.bio?.trim() ? user.bio.trim() : emptyLabel
+  const max = variant === "incoming" ? INCOMING_PREVIEW_BIO_MAX : DISCOVER_PREVIEW_BIO_MAX
+  return truncateBio(fullBio, max)
 }
 
 /**
@@ -104,7 +122,7 @@ export function toDiscoverProfile(user: RichUserRow, unlocked: boolean): Discove
     age: user.age ?? 0,
     city: user.city ?? "Unknown",
     photos,
-    previewBio: truncateBio(fullBio, DISCOVER_PREVIEW_BIO_MAX),
+    previewBio: lockedPreviewBio(user, "discover"),
     previewInterests,
     fullBio,
     allInterests,
@@ -120,7 +138,6 @@ export function toDiscoverProfile(user: RichUserRow, unlocked: boolean): Discove
  * Hero image uses avatar only when possible so extra gallery photos stay hidden.
  */
 export function incomingLikeLockedPreview(user: RichUserRow) {
-  const fullBio = user.bio?.trim() ? user.bio.trim() : "No bio added yet."
   const prefs = (user.preferences ?? []).filter(Boolean)
   const gallery = (user.gallery_urls ?? []).filter(Boolean)
   const avatar = user.avatar_url?.trim() ?? ""
@@ -132,7 +149,7 @@ export function incomingLikeLockedPreview(user: RichUserRow) {
 
   return {
     heroUrl,
-    previewBio: truncateBio(fullBio, INCOMING_PREVIEW_BIO_MAX),
+    previewBio: lockedPreviewBio(user, "incoming"),
     previewTags,
     hiddenTagCount,
     hiddenPhotoCount,

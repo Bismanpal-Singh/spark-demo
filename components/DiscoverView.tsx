@@ -68,13 +68,13 @@ export function DiscoverView({
       let usersData: UserRow[] | null = null
       const rich = await supabase
         .from("users")
-        .select("id,display_name,age,city,bio,avatar_url,gallery_urls,preferences,looking_for,fun_fact")
+        .select("id,display_name,age,city,tagline,bio,avatar_url,gallery_urls,preferences,looking_for,fun_fact")
         .neq("id", userId)
 
       if (rich.error) {
         const basic = await supabase
           .from("users")
-          .select("id,display_name,age,city,bio,avatar_url")
+          .select("id,display_name,age,city,tagline,bio,avatar_url")
           .neq("id", userId)
         if (basic.error) throw basic.error
         usersData = (basic.data ?? []) as UserRow[]

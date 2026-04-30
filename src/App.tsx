@@ -13,6 +13,12 @@ function isResetMatchRpcRow(value: unknown): value is { ok: boolean } {
   return typeof value === "object" && value !== null && "ok" in value
 }
 
+/** Paste while recording — switch account for A vs B. */
+const DEMO_SPARK_A = "Coffee Sunday morning, then see where the day goes."
+const DEMO_SPARK_B = "Works for me — I'll meet you by the river steps."
+const DEMO_IGNITE_A = "Back alley bakery behind the market — no sign, best croissants."
+const DEMO_IGNITE_B = "Sundial garden at dusk; use the east gate, locals only."
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("discover")
   const [userId, setUserId] = useState<string | null>(null)
@@ -286,6 +292,32 @@ export default function App() {
                   {controlError}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border/60 bg-background/40 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Demo answers</div>
+            <p className="mt-2 text-xs text-muted-foreground">Switch user when pasting A vs B.</p>
+
+            <div className="mt-4 space-y-3 text-sm text-foreground/90">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Spark</div>
+                <p className="mt-1 select-all">
+                  <span className="text-muted-foreground">A:</span> {DEMO_SPARK_A}
+                </p>
+                <p className="mt-1 select-all">
+                  <span className="text-muted-foreground">B:</span> {DEMO_SPARK_B}
+                </p>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Ignite</div>
+                <p className="mt-1 select-all">
+                  <span className="text-muted-foreground">A:</span> {DEMO_IGNITE_A}
+                </p>
+                <p className="mt-1 select-all">
+                  <span className="text-muted-foreground">B:</span> {DEMO_IGNITE_B}
+                </p>
+              </div>
             </div>
           </div>
         </aside>

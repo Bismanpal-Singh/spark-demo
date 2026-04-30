@@ -171,7 +171,7 @@ export function ChatConversation({
       const rich = await supabase
         .from("users")
         .select(
-          "id,display_name,age,city,bio,avatar_url,gallery_urls,preferences,looking_for,fun_fact",
+          "id,display_name,age,city,tagline,bio,avatar_url,gallery_urls,preferences,looking_for,fun_fact",
         )
         .eq("id", other.id)
         .maybeSingle()
@@ -179,7 +179,7 @@ export function ChatConversation({
       if (rich.error) {
         const basic = await supabase
           .from("users")
-          .select("id,display_name,age,city,bio,avatar_url")
+          .select("id,display_name,age,city,tagline,bio,avatar_url")
           .eq("id", other.id)
           .maybeSingle()
         if (basic.error) throw basic.error
@@ -193,6 +193,7 @@ export function ChatConversation({
         id: other.id,
         display_name: other.display_name,
         avatar_url: other.avatar_url,
+        tagline: null,
         bio: null,
         age: null,
         city: null,

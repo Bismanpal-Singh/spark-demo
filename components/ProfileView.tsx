@@ -5,11 +5,13 @@ import { Camera, Edit3, MapPin, Settings, LogOut } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/src/supabase"
+import { TAGLINE_MAX_CHARS } from "@/lib/profileVisibility"
 
 type UserProfile = {
   id: string
   display_name: string | null
   age: number | null
+  tagline: string | null
   bio: string | null
   avatar_url: string | null
   city: string | null
@@ -35,6 +37,10 @@ const interestFallback = (bio: string | null) => {
 
 export function ProfileView({ userId }: { userId: string }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [taglineEdit, setTaglineEdit] = useState("")
+  const [bioEdit, setBioEdit] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,12 +51,15 @@ export function ProfileView({ userId }: { userId: string }) {
       try {
         const { data, error: qErr } = await supabase
           .from("users")
-          .select("id,display_name,age,bio,avatar_url,city,preferences")
+          .select("id,display_name,age,tagline,bio,avatar_url,city,preferences")
           .eq("id", userId)
           .single()
         if (qErr) throw qErr
 
-        setProfile(data as UserProfile)
+        const row = data as UserProfile
+        setProfile(row)
+        setTaglineEdit(row.tagline ?? "")
+        setBioEdit(row.bio ?? "")
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load profile")
       } finally {
@@ -64,7 +73,30 @@ export function ProfileView({ userId }: { userId: string }) {
   const interests =
     (profile?.preferences ?? []).filter(Boolean).length > 0
       ? (profile?.preferences ?? []).filter(Boolean)
-      : interestFallback(profile?.bio ?? null)
+      : interestFallback(profile?.bio ?? profile?.tagline ?? null)
+
+  const saveAbout = async () => {
+    if (!profile) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const tagline =
+        taglineEdit.trim().slice(0, TAGLINE_MAX_CHARS) || null
+      const bio = bioEdit.trim() || null
+      const { error: uErr } = await supabase
+        .from("users")
+        .update({ tagline, bio })
+        .eq("id", userId)
+      if (uErr) throw uErr
+      setProfile({ ...profile, tagline, bio })
+      setTaglineEdit(tagline ?? "")
+      setBioEdit(bio ?? "")
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
@@ -134,11 +166,47 @@ export function ProfileView({ userId }: { userId: string }) {
             <div className="mb-6 rounded-2xl bg-card p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="font-semibold text-foreground">About me</h3>
-                <button className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                  <Edit3 className="h-4 w-4" />
-                </button>
               </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">{profile.bio ?? ""}</p>
+
+              <label className="block text-xs font-medium text-muted-foreground">
+                Tagline <span className="font-normal">(Discovery preview — before you match)</span>
+              </label>
+              <textarea
+                value={taglineEdit}
+                onChange={(e) =>
+                  setTaglineEdit(e.target.value.slice(0, TAGLINE_MAX_CHARS))
+                }
+                maxLength={TAGLINE_MAX_CHARS}
+                placeholder="One short line people see before unlock…"
+                rows={2}
+                className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <p className="mt-1 text-right text-[11px] text-muted-foreground">
+                {taglineEdit.length}/{TAGLINE_MAX_CHARS}
+              </p>
+
+              <label className="mt-4 block text-xs font-medium text-muted-foreground">
+                Full bio <span className="font-normal">(After spark unlock)</span>
+              </label>
+              <textarea
+                value={bioEdit}
+                onChange={(e) => setBioEdit(e.target.value)}
+                placeholder="Your longer story…"
+                rows={6}
+                className="mt-1.5 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+
+              {saveError && (
+                <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">{saveError}</p>
+              )}
+              <Button
+                type="button"
+                className="mt-3 w-full"
+                disabled={saving}
+                onClick={() => void saveAbout()}
+              >
+                {saving ? "Saving…" : "Save about me"}
+              </Button>
             </div>
 
             <div className="rounded-2xl bg-card p-5 shadow-sm">

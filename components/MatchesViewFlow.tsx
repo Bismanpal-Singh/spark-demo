@@ -93,7 +93,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         otherIds.size > 0
           ? await supabase
               .from("users")
-              .select("id,display_name,avatar_url,bio,age,city,preferences,gallery_urls,looking_for,fun_fact")
+              .select("id,display_name,avatar_url,tagline,bio,age,city,preferences,gallery_urls,looking_for,fun_fact")
               .in("id", Array.from(otherIds))
           : { data: [] as UserRow[], error: null }
       const users =
@@ -101,7 +101,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
           ? (
               await supabase
                 .from("users")
-                .select("id,display_name,avatar_url,bio")
+                .select("id,display_name,avatar_url,tagline,bio")
                 .in("id", Array.from(otherIds))
             ).data
           : usersResult.data
