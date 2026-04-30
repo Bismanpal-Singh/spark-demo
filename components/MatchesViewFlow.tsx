@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Flame, Heart, Lock, MapPin, Sparkles, X } from "lucide-react"
 import { supabase } from "@/src/supabase"
 import { getQuestionForMatch } from "@/lib/questions"
-import { SPARK_MIN_CHARS, SPARK_MAX_CHARS } from "@/lib/sparkRules"
 import { SparkReveal, type SparkRevealProfile } from "@/components/SparkReveal"
 import { incomingLikeLockedPreview, type RichUserRow } from "@/lib/profileVisibility"
 
@@ -23,6 +22,27 @@ type MatchesResponse = {
 
 const getOtherUserId = (m: MatchRow, userId: string) => (m.user_a === userId ? m.user_b : m.user_a)
 
+type MatchesProfileSheet =
+  | { kind: "incoming_like"; user: UserRow; fromUserId: string }
+  | { kind: "browse"; user: UserRow }
+
+function MatchRowProfileTrigger({ user, onPress }: { user: UserRow; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-left text-foreground transition hover:bg-background/60"
+    >
+      <img
+        src={user.avatar_url ?? ""}
+        alt={user.display_name ?? "Profile"}
+        className="h-9 w-9 shrink-0 rounded-full border border-border/60 bg-muted object-cover"
+      />
+      <span className="truncate font-medium">{user.display_name ?? "Unknown"}</span>
+    </button>
+  )
+}
+
 export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoToChat?: (matchId: string) => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,13 +57,12 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
   const [sparkRevealProfile, setSparkRevealProfile] = useState<SparkRevealProfile | null>(null)
   const [sparkRevealMatchId, setSparkRevealMatchId] = useState<string | null>(null)
   const [seenSparkRevealIds, setSeenSparkRevealIds] = useState<Set<string>>(new Set())
-  const [incomingPreview, setIncomingPreview] = useState<UserRow | null>(null)
+  const [profileSheet, setProfileSheet] = useState<MatchesProfileSheet | null>(null)
   const [incomingActionLoading, setIncomingActionLoading] = useState<"accept" | "decline" | null>(null)
-  const canSubmit = useMemo(() => answer.trim().length >= SPARK_MIN_CHARS && answer.trim().length <= SPARK_MAX_CHARS, [answer])
   const sparkRevealSeenKey = useMemo(() => `spark-reveal-seen:${userId}`, [userId])
-  const incomingLockedPreview = useMemo(
-    () => (incomingPreview ? incomingLikeLockedPreview(incomingPreview) : null),
-    [incomingPreview],
+  const profileSheetLockedPreview = useMemo(
+    () => (profileSheet ? incomingLikeLockedPreview(profileSheet.user) : null),
+    [profileSheet],
   )
 
   useEffect(() => {
@@ -234,7 +253,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         // Don't fail the entire flow here; match row already exists and drives spark category.
       }
 
-      setIncomingPreview(null)
+      setProfileSheet(null)
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to approve like")
@@ -267,7 +286,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
         .or(`and(user_a.eq.${userId},user_b.eq.${otherUserId}),and(user_a.eq.${otherUserId},user_b.eq.${userId})`)
       if (deleteMatchError) throw deleteMatchError
 
-      setIncomingPreview(null)
+      setProfileSheet(null)
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to decline like")
@@ -359,17 +378,16 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                 <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-3 text-sm text-muted-foreground">No incoming likes yet.</div>
               ) : (
                 data.incoming_likes.map((r) => (
-                  <div key={r.other.id} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 last:mb-0">
+                  <div key={r.other.id} className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-card p-3 last:mb-0">
+                    <MatchRowProfileTrigger
+                      user={r.other}
+                      onPress={() =>
+                        setProfileSheet({ kind: "incoming_like", user: r.other, fromUserId: r.fromUserId })
+                      }
+                    />
                     <button
                       type="button"
-                      onClick={() => setIncomingPreview(r.other)}
-                      className="flex items-center gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-background/60"
-                    >
-                      <img src={r.other.avatar_url ?? ""} alt={r.other.display_name ?? "Profile"} className="h-9 w-9 rounded-full border border-border/60 object-cover" />
-                      <span>{r.other.display_name ?? "Unknown"}</span>
-                    </button>
-                    <button
-                      className="rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
+                      className="shrink-0 rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
                       onClick={() => void approveLike(r.fromUserId)}
                     >
                       Approve
@@ -392,9 +410,18 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                 <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-3 text-sm text-muted-foreground">No spark prompts right now.</div>
               ) : (
                 data.spark_pending.map((r) => (
-                  <div key={r.match.id} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 last:mb-0">
-                    <span>{r.other.display_name ?? "Unknown"}</span>
-                    <button className="rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground" onClick={() => void openSparkPrompt(r.match.id)}>Answer spark</button>
+                  <div key={r.match.id} className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-card p-3 last:mb-0">
+                    <MatchRowProfileTrigger
+                      user={r.other}
+                      onPress={() => setProfileSheet({ kind: "browse", user: r.other })}
+                    />
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
+                      onClick={() => void openSparkPrompt(r.match.id)}
+                    >
+                      Answer spark
+                    </button>
                   </div>
                 ))
               )}
@@ -413,15 +440,21 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                 <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-3 text-sm text-muted-foreground">No pending responses.</div>
               ) : (
                 data.waiting_on_them.map((r) => (
-                  <div key={`${r.other.id}-${r.stage}`} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 text-muted-foreground last:mb-0">
-                    <span>{r.other.display_name ?? "Unknown"}</span>
+                  <div
+                    key={`${r.other.id}-${r.stage}`}
+                    className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-card p-3 last:mb-0"
+                  >
+                    <MatchRowProfileTrigger
+                      user={r.other}
+                      onPress={() => setProfileSheet({ kind: "browse", user: r.other })}
+                    />
                     {r.stage === "spark" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[11px] font-medium text-amber-100/90">
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[11px] font-medium text-amber-100/90">
                         <Flame className="h-3.5 w-3.5 fill-amber-300/80 text-amber-300" />
                         Spark sent
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/25 bg-rose-300/10 px-2.5 py-1 text-[11px] font-medium text-rose-100/90">
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-rose-300/25 bg-rose-300/10 px-2.5 py-1 text-[11px] font-medium text-rose-100/90">
                         <Heart className="h-3.5 w-3.5 fill-rose-300/80 text-rose-300" />
                         Like sent
                       </span>
@@ -444,11 +477,15 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                 <div className="rounded-xl border border-dashed border-border/70 bg-background/40 p-3 text-sm text-muted-foreground">No sparked matches yet.</div>
               ) : (
                 data.sparked.map((r) => (
-                  <div key={r.match.id} className="mb-2 flex items-center justify-between rounded-xl bg-card p-3 last:mb-0">
-                    <span>{r.other.display_name ?? "Unknown"}</span>
+                  <div key={r.match.id} className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-card p-3 last:mb-0">
+                    <MatchRowProfileTrigger
+                      user={r.other}
+                      onPress={() => setProfileSheet({ kind: "browse", user: r.other })}
+                    />
                     {r.bothAnswered && !seenSparkRevealIds.has(r.match.id) ? (
                       <button
-                        className="rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
+                        type="button"
+                        className="shrink-0 rounded-full bg-primary px-3 py-1 text-sm text-primary-foreground"
                         onClick={() => {
                           setSparkRevealMatchId(r.match.id)
                           setSparkRevealProfile({
@@ -461,7 +498,13 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                         See spark
                       </button>
                     ) : (
-                      <button className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary" onClick={() => onGoToChat?.(r.match.id)}>Go to chat</button>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-sm text-primary"
+                        onClick={() => onGoToChat?.(r.match.id)}
+                      >
+                        Go to chat
+                      </button>
                     )}
                   </div>
                 ))
@@ -476,15 +519,11 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
           <div className="w-full max-w-md rounded-3xl bg-card p-5">
             <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold">Spark prompt</h2><button onClick={() => setSparkOpen(false)} aria-label="Close"><X className="h-4 w-4" /></button></div>
             <p className="mb-2 text-sm">{sparkQuestion}</p>
-            <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} maxLength={SPARK_MAX_CHARS} className="min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm" />
-            <p className="mt-1 text-right text-xs text-muted-foreground">
-              {answer.trim().length}/{SPARK_MAX_CHARS}
-              {answer.trim().length < SPARK_MIN_CHARS ? ` · at least ${SPARK_MIN_CHARS} characters` : ""}
-            </p>
+            <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} className="min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm" />
             {sparkError && <div className="mt-2 text-sm text-rose-300">{sparkError}</div>}
             <button
               type="button"
-              disabled={!canSubmit || sparkLoading}
+              disabled={sparkLoading}
               onClick={() => void submitSparkAnswer()}
               className="mt-3 w-full rounded-xl bg-primary py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -509,7 +548,7 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
       )}
 
       <AnimatePresence>
-        {incomingPreview && incomingLockedPreview && (
+        {profileSheet && profileSheetLockedPreview && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -526,48 +565,54 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
             >
               <div className="relative h-full w-full">
                 <img
-                  src={incomingLockedPreview.heroUrl}
-                  alt={incomingPreview.display_name ?? "Profile"}
+                  src={profileSheetLockedPreview.heroUrl}
+                  alt={profileSheet.user.display_name ?? "Profile"}
                   className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
                 <button
                   type="button"
-                  onClick={() => setIncomingPreview(null)}
+                  onClick={() => setProfileSheet(null)}
                   aria-label="Close"
                   className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/30 p-1.5 text-white/80 backdrop-blur transition hover:bg-black/45"
                 >
                   <X className="h-4 w-4" />
                 </button>
                 <div className="absolute inset-x-0 bottom-0 p-4 pb-5 text-white">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/55">Liked you</div>
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/55">
+                    {profileSheet.kind === "incoming_like" ? "Liked you" : "Profile"}
+                  </div>
                   <h2 className="mt-1 text-4xl font-semibold leading-none text-white">
-                    {incomingPreview.display_name ?? "Unknown"}
-                    {incomingPreview.age ? <span className="ml-2 text-white/65">{incomingPreview.age}</span> : null}
+                    {profileSheet.user.display_name ?? "Unknown"}
+                    {profileSheet.user.age ? (
+                      <span className="ml-2 text-white/65">{profileSheet.user.age}</span>
+                    ) : null}
                   </h2>
-                  {incomingPreview.city ? (
+                  {profileSheet.user.city ? (
                     <div className="mt-2 flex items-center gap-1.5 text-white/75">
                       <MapPin className="h-3.5 w-3.5" />
-                      <span className="text-sm">{incomingPreview.city}</span>
+                      <span className="text-sm">{profileSheet.user.city}</span>
                     </div>
                   ) : null}
 
-                  <p className="mt-2 text-base leading-relaxed text-white/92">{incomingLockedPreview.previewBio}</p>
+                  <p className="mt-2 text-base leading-relaxed text-white/92">
+                    {profileSheetLockedPreview.previewBio}
+                  </p>
 
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {incomingLockedPreview.previewTags.map((tag) => (
+                    {profileSheetLockedPreview.previewTags.map((tag) => (
                       <span key={tag} className="rounded-full bg-white/15 px-2.5 py-1 text-xs text-white">
                         {tag}
                       </span>
                     ))}
-                    {incomingLockedPreview.hiddenTagCount > 0 ? (
+                    {profileSheetLockedPreview.hiddenTagCount > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/65">
-                        <Lock className="h-3 w-3" />+{incomingLockedPreview.hiddenTagCount}
+                        <Lock className="h-3 w-3" />+{profileSheetLockedPreview.hiddenTagCount}
                       </span>
                     ) : null}
-                    {incomingLockedPreview.hiddenPhotoCount > 0 ? (
+                    {profileSheetLockedPreview.hiddenPhotoCount > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/65">
-                        <Lock className="h-3 w-3" />+{incomingLockedPreview.hiddenPhotoCount} photos
+                        <Lock className="h-3 w-3" />+{profileSheetLockedPreview.hiddenPhotoCount} photos
                       </span>
                     ) : null}
                   </div>
@@ -577,24 +622,34 @@ export function MatchesViewFlow({ userId, onGoToChat }: { userId: string; onGoTo
                     <span className="text-xs text-white/65">Spark to unlock full profile</span>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2">
+                  {profileSheet.kind === "incoming_like" ? (
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={incomingActionLoading !== null}
+                        onClick={() => void declineLike(profileSheet.user.id)}
+                        className="rounded-xl border border-white/20 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-black/45 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {incomingActionLoading === "decline" ? "Declining..." : "Decline"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={incomingActionLoading !== null}
+                        onClick={() => void approveLike(profileSheet.fromUserId)}
+                        className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {incomingActionLoading === "accept" ? "Accepting..." : "Accept"}
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      disabled={incomingActionLoading !== null}
-                      onClick={() => void declineLike(incomingPreview.id)}
-                      className="rounded-xl border border-white/20 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-black/45 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => setProfileSheet(null)}
+                      className="mt-4 w-full rounded-xl border border-white/20 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-black/45"
                     >
-                      {incomingActionLoading === "decline" ? "Declining..." : "Decline"}
+                      Close
                     </button>
-                    <button
-                      type="button"
-                      disabled={incomingActionLoading !== null}
-                      onClick={() => void approveLike(incomingPreview.id)}
-                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {incomingActionLoading === "accept" ? "Accepting..." : "Accept"}
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
             </motion.div>
