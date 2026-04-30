@@ -13,11 +13,10 @@ function isResetMatchRpcRow(value: unknown): value is { ok: boolean } {
   return typeof value === "object" && value !== null && "ok" in value
 }
 
-/** Paste while recording — switch account for A vs B. */
-const DEMO_SPARK_A = "Coffee Sunday morning, then see where the day goes."
-const DEMO_SPARK_B = "Works for me — I'll meet you by the river steps."
-const DEMO_IGNITE_A = "Back alley bakery behind the market — no sign, best croissants."
-const DEMO_IGNITE_B = "Sundial garden at dusk; use the east gate, locals only."
+const DEMO_SPARK_A = "Finance forever? Wrong — I needed creative work."
+const DEMO_SPARK_B = "Bad at people? Wrong — burned out; quieter hangs help."
+const DEMO_IGNITE_A = "Mercer alley, weekend bread window — no sign."
+const DEMO_IGNITE_B = "Stair between two buildings — river view, usually empty."
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("discover")
@@ -241,22 +240,27 @@ export default function App() {
   return (
     <div className="h-dvh overflow-hidden bg-gradient-to-b from-background to-muted/40">
       <div className="mx-auto flex h-full w-full max-w-6xl items-stretch overflow-hidden lg:gap-8 lg:px-6 lg:py-6">
-        <aside className="hidden flex-1 rounded-3xl border border-border/60 bg-card/70 p-8 backdrop-blur lg:block">
-          <h1 className="text-3xl font-bold tracking-tight">Spark</h1>
-          <p className="mt-3 max-w-md text-muted-foreground">
-            Mutual icebreakers, then real conversation.
-          </p>
+        <aside className="hidden flex-1 rounded-3xl border border-border/60 bg-card/70 p-6 backdrop-blur lg:block">
+          <h1 className="text-2xl font-bold tracking-tight">Feature : Spark &amp; Ignite</h1>
+          <div className="mt-3 max-w-md space-y-2 text-sm leading-relaxed text-muted-foreground">
+            <p>
+              <span className="font-medium text-foreground/80">Spark</span> turns matching into a real moment: two people get the same prompt, answer independently, then reveal together. That reveal unlocks richer profiles and opens the conversation with genuine context instead of cold starts.
+            </p>
+            <p>
+              <span className="font-medium text-foreground/80">Ignite</span> carries that momentum into action: send a date request, accept, complete one thoughtful mini task, and move into a shared plan. It keeps the flow playful, intentional, and easy to demo end-to-end.
+            </p>
+          </div>
 
-          <div className="mt-8 rounded-2xl border border-border/60 bg-background/40 p-4">
+          <div className="mt-5 rounded-2xl border border-border/60 bg-background/40 p-3">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Control panel
             </div>
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="mt-2 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => void resetDiscover()}
                 disabled={resettingDiscover}
-                className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {resettingDiscover ? "Resetting Discover..." : "Reset Discover"}
               </button>
@@ -264,7 +268,7 @@ export default function App() {
                 type="button"
                 onClick={() => void resetSpark()}
                 disabled={resettingSpark}
-                className="rounded-2xl border border-border/70 bg-card/50 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-border/70 bg-card/50 px-3 py-2.5 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {resettingSpark ? "Resetting Spark..." : "Reset Spark"}
               </button>
@@ -272,7 +276,7 @@ export default function App() {
                 type="button"
                 onClick={() => void resetIgnite()}
                 disabled={resettingIgnite}
-                className="rounded-2xl border border-border/70 bg-card/50 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-border/70 bg-card/50 px-3 py-2.5 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {resettingIgnite ? "Resetting Ignite..." : "Reset Ignite"}
               </button>
@@ -280,13 +284,10 @@ export default function App() {
                 type="button"
                 onClick={() => void resetMatches()}
                 disabled={resettingMatches}
-                className="rounded-2xl border border-border/70 bg-card/50 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-border/70 bg-card/50 px-3 py-2.5 text-sm font-semibold text-foreground transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {resettingMatches ? "Resetting Matches..." : "Reset Matches"}
               </button>
-              <p className="text-xs text-muted-foreground">
-                Use Discover reset for swipes, Spark reset for Q/A flow, Ignite reset for date flow, or Reset Matches for a full end-to-end restart.
-              </p>
               {controlError && (
                 <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-foreground/90">
                   {controlError}
@@ -295,27 +296,29 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border/60 bg-background/40 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Demo answers</div>
-            <p className="mt-2 text-xs text-muted-foreground">Switch user when pasting A vs B.</p>
-
-            <div className="mt-4 space-y-3 text-sm text-foreground/90">
+          <div className="mt-4 rounded-2xl border border-border/60 bg-background/40 p-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Demo</div>
+            <div className="mt-2 space-y-2 text-xs text-foreground/90">
               <div>
-                <div className="text-xs font-medium text-muted-foreground">Spark</div>
-                <p className="mt-1 select-all">
-                  <span className="text-muted-foreground">A:</span> {DEMO_SPARK_A}
+                <div className="font-medium text-muted-foreground">Spark</div>
+                <p className="mt-0.5 select-all">
+                  <span className="text-muted-foreground">A </span>
+                  {DEMO_SPARK_A}
                 </p>
-                <p className="mt-1 select-all">
-                  <span className="text-muted-foreground">B:</span> {DEMO_SPARK_B}
+                <p className="mt-0.5 select-all">
+                  <span className="text-muted-foreground">B </span>
+                  {DEMO_SPARK_B}
                 </p>
               </div>
               <div>
-                <div className="text-xs font-medium text-muted-foreground">Ignite</div>
-                <p className="mt-1 select-all">
-                  <span className="text-muted-foreground">A:</span> {DEMO_IGNITE_A}
+                <div className="font-medium text-muted-foreground">Ignite</div>
+                <p className="mt-0.5 select-all">
+                  <span className="text-muted-foreground">A </span>
+                  {DEMO_IGNITE_A}
                 </p>
-                <p className="mt-1 select-all">
-                  <span className="text-muted-foreground">B:</span> {DEMO_IGNITE_B}
+                <p className="mt-0.5 select-all">
+                  <span className="text-muted-foreground">B </span>
+                  {DEMO_IGNITE_B}
                 </p>
               </div>
             </div>
