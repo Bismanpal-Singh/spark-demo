@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { supabase } from "@/src/supabase"
 import { IgniteConfirmSheet, IgniteDateFlow } from "@/components/IgniteDateFlow"
 import { selectTask, type TaskProfile } from "@/lib/tasks"
+import { IGNITE_UI_FONT } from "@/lib/igniteUI"
 import { toDiscoverProfile, type DiscoverProfile, type RichUserRow } from "@/lib/profileVisibility"
 import { Badge } from "@/components/ui/badge"
 
@@ -121,6 +122,20 @@ export function ChatConversation({
   }, [icebreakerDismissStorageKey])
 
   const igniteFrictionComplete = taskRow?.status === "complete"
+  const myFrictionAnswer = taskRow ? (iAmA ? taskRow.user_a_response : taskRow.user_b_response) : null
+  const theirFrictionAnswer = taskRow ? (iAmA ? taskRow.user_b_response : taskRow.user_a_response) : null
+  const bothFrictionFilled =
+    taskRow?.user_a_response != null && taskRow?.user_b_response != null
+  const frictionPlanReady =
+    dateRequest?.status === "accepted" &&
+    taskRow != null &&
+    (taskRow.status === "complete" || bothFrictionFilled)
+  const frictionWaitingOnThem =
+    dateRequest?.status === "accepted" &&
+    taskRow?.status === "active" &&
+    myFrictionAnswer != null &&
+    theirFrictionAnswer == null
+
   const showPinnedIcebreaker =
     !igniteFrictionComplete && !icebreakerUserDismissed && Boolean(theirAnswer && myAnswer)
 
@@ -362,6 +377,8 @@ export function ChatConversation({
   const isRequester = dateRequest?.requested_by === userId
   const requestPending = dateRequest?.status === "pending"
   const incomingPending = requestPending && !isRequester
+  const igniteChipMuted =
+    (requestPending && isRequester) || (dateRequest?.status === "accepted" && !frictionPlanReady)
 
   const refreshDateAndTask = async () => {
     const { data: requestRow } = await supabase
@@ -495,12 +512,12 @@ export function ChatConversation({
       .eq("id", taskRow.id)
       .single()
     const row = fresh as FrictionTaskRow
-    if (row.user_a_response && row.user_b_response && row.status !== "complete") {
+    if (row.user_a_response != null && row.user_b_response != null && row.status !== "complete") {
       await supabase.from("friction_tasks").update({ status: "complete" }).eq("id", row.id)
       row.status = "complete"
     }
     setTaskRow(row)
-    return { bothAnswered: Boolean(row.user_a_response && row.user_b_response) }
+    return { bothAnswered: row.user_a_response != null && row.user_b_response != null }
   }
 
   const closeIgniteFlow = () => {
@@ -565,6 +582,8 @@ export function ChatConversation({
           </div>
 
           <button
+            type="button"
+            style={{ fontFamily: IGNITE_UI_FONT }}
             onClick={() => {
               if (requestPending && isRequester) {
                 setIgniteFlowMode("task")
@@ -578,14 +597,45 @@ export function ChatConversation({
               }
               setShowIgniteSheet(true)
             }}
-            className="flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[12px] tracking-[0.04em] text-amber-400 transition-all duration-200 ease-out hover:border-amber-400/30 hover:bg-amber-400/15"
+            className={
+              igniteChipMuted
+                ? "inline-flex max-w-[min(46vw,11rem)] shrink-0 items-center gap-2 rounded-2xl border border-white/[0.1] bg-[#0c0c0f]/85 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm transition-[background-color,border-color] duration-200 hover:border-white/15 hover:bg-[#121218]/90"
+                : dateRequest?.status === "accepted"
+                  ? "inline-flex max-w-[min(46vw,11rem)] shrink-0 items-center gap-2 rounded-2xl border border-amber-400/35 bg-gradient-to-b from-amber-400/22 to-amber-950/50 px-3 py-2 shadow-[0_0_28px_rgba(251,191,36,0.14),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm transition-[filter,transform] duration-200 hover:brightness-105 active:scale-[0.98]"
+                  : "inline-flex max-w-[min(46vw,11rem)] shrink-0 items-center gap-2 rounded-2xl border border-amber-400/28 bg-gradient-to-b from-amber-400/16 to-[#0c0c0f] px-3 py-2 shadow-[0_0_24px_rgba(251,191,36,0.1),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm transition-[filter,transform,border-color] duration-200 hover:border-amber-400/38 hover:from-amber-400/22 active:scale-[0.98]"
+            }
           >
-            <Flame className="h-4 w-4 text-amber-400" />
-            {requestPending && isRequester
-              ? "request sent"
-              : dateRequest?.status === "accepted"
-                ? "view plan"
-                : "ignite a date"}
+            <span
+              className={
+                igniteChipMuted
+                  ? "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06]"
+                  : "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400/18 ring-1 ring-amber-400/25"
+              }
+            >
+              <Flame
+                className={
+                  igniteChipMuted ? "h-3.5 w-3.5 text-white/35" : "h-3.5 w-3.5 text-amber-300"
+                }
+                strokeWidth={1.75}
+              />
+            </span>
+            <span
+              className={
+                igniteChipMuted
+                  ? "truncate text-[11px] font-medium tracking-wide text-white/50"
+                  : "truncate text-[11px] font-semibold tracking-[0.06em] text-amber-50/95"
+              }
+            >
+              {requestPending && isRequester
+                ? "Request sent"
+                : frictionPlanReady
+                  ? "View plan"
+                  : dateRequest?.status === "accepted" && frictionWaitingOnThem
+                    ? "Waiting on them"
+                    : dateRequest?.status === "accepted"
+                      ? "Awaiting answer"
+                      : "Ignite a date"}
+            </span>
           </button>
         </div>
       </header>
@@ -649,46 +699,69 @@ export function ChatConversation({
 
           {requestPending && isRequester && (
             <motion.div
+              style={{ fontFamily: IGNITE_UI_FONT }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="ml-auto w-fit max-w-[78%] rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]"
+              className="ml-auto w-fit max-w-[78%] overflow-hidden rounded-2xl border border-amber-400/18 bg-[#0c0c0f]/90 p-3.5 shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-md"
             >
-              <div className="flex items-start gap-2">
-                <Flame className="mt-0.5 h-3.5 w-3.5 text-amber-400" />
+              <div className="flex items-start gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-400/12 ring-1 ring-amber-400/25">
+                  <Flame className="h-4 w-4 text-amber-400" />
+                </div>
                 <div>
-                  <div className="text-[12px] tracking-[0.04em] text-amber-400">date request sent</div>
-                  <div className="text-[11px] text-white/30">waiting for them to respond</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-400/90">Request sent</div>
+                  <div className="mt-0.5 text-[12px] font-medium tracking-wide text-white/45">Waiting for their reply</div>
                 </div>
               </div>
-              <div className="mt-2 h-px w-full animate-pulse bg-amber-400/40" />
+              <div className="mt-3 h-px w-full rounded-full bg-gradient-to-r from-transparent via-amber-400/35 to-transparent" />
             </motion.div>
           )}
 
           {incomingPending && (
-            <div className="mx-4 rounded-2xl border border-amber-400/25 bg-[#161616] p-5 shadow-[0_0_40px_rgba(251,146,60,0.08)]">
-              <div className="mb-2 flex justify-center">
-                <Flame className="h-5 w-5 text-amber-400" />
+            <motion.div
+              style={{ fontFamily: IGNITE_UI_FONT }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              className="relative mx-auto w-full max-w-md overflow-hidden rounded-[28px] border border-amber-400/22 bg-[#0c0c0f]/95 p-6 shadow-[0_16px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+            >
+              <div
+                className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/30 to-transparent"
+                aria-hidden
+              />
+              <div className="flex flex-col items-center text-center">
+                <div className="relative">
+                  <div
+                    className="absolute inset-0 scale-150 rounded-full bg-amber-400/15 blur-lg"
+                    aria-hidden
+                  />
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400/25 to-amber-600/10 ring-1 ring-amber-400/30">
+                    <Flame className="h-6 w-6 text-amber-400" strokeWidth={1.75} />
+                  </div>
+                </div>
+                <p className="mt-5 text-[10px] font-medium uppercase tracking-[0.22em] text-white/40">Ignite invite</p>
+                <p className="mt-2 px-1 text-[15px] font-medium leading-snug tracking-[-0.01em] text-white/92">
+                  <span className="text-white">{(other.display_name ?? "they").toLowerCase()}</span>
+                  <span className="text-white/55"> wants to ignite a date</span>
+                </p>
               </div>
-              <div className="text-center text-sm font-medium text-white">
-                {(other.display_name ?? "they").toLowerCase()} wants to ignite a date
-              </div>
-              <div className="mt-4 space-y-2">
+              <div className="mt-8 flex flex-col gap-2.5">
                 <button
                   type="button"
                   onClick={() => void acceptIncomingRequest()}
-                  className="h-11 w-full rounded-xl bg-amber-400 text-sm font-medium text-black"
+                  className="h-[3.25rem] w-full rounded-2xl bg-gradient-to-b from-amber-300 to-amber-500 text-[15px] font-semibold tracking-wide text-neutral-950 shadow-[0_8px_28px_rgba(251,191,36,0.22)] transition-[filter,transform] duration-200 hover:brightness-[1.03] active:scale-[0.99]"
                 >
-                  i'm in
+                  i&apos;m in
                 </button>
                 <button
                   type="button"
                   onClick={() => void declineIncomingRequest()}
-                  className="h-11 w-full rounded-xl border border-white/25 bg-transparent text-sm text-white/50"
+                  className="h-12 w-full rounded-2xl border border-white/[0.12] bg-white/[0.03] text-[14px] font-medium tracking-wide text-white/55 transition-colors duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:text-white/75"
                 >
                   not yet
                 </button>
               </div>
-            </div>
+            </motion.div>
           )}
 
           <AnimatePresence>

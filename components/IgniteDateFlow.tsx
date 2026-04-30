@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { getTaskByKey } from "@/lib/tasks"
+import { IGNITE_UI_FONT } from "@/lib/igniteUI"
 
 type MatchRow = {
   id: string
@@ -149,9 +150,14 @@ export function IgniteDateFlow({
   const finishRef = useRef(false)
 
   const iAmA = match.user_a === me.id
+  /** Null means not submitted yet; empty string is a valid submitted answer. */
   const myResponse = iAmA ? task?.user_a_response ?? null : task?.user_b_response ?? null
   const theirResponse = iAmA ? task?.user_b_response ?? null : task?.user_a_response ?? null
-  const bothAnswered = Boolean(task?.user_a_response) && Boolean(task?.user_b_response)
+  const iSubmittedMyResponse = task
+    ? (iAmA ? task.user_a_response != null : task.user_b_response != null)
+    : false
+  const bothAnswered =
+    task != null && task.user_a_response != null && task.user_b_response != null
 
   const taskText = useMemo(() => {
     if (!task?.task_key) return "choose one specific plan for your first date and explain why it fits both of you."
@@ -170,6 +176,9 @@ export function IgniteDateFlow({
     finishRef.current = false
 
     if (mode === "task") {
+      // Skip intro timeline but always show burning bonfire with the task card.
+      setShowBonfire(true)
+      setBonfireBreathing(true)
       setShowTaskCard(true)
       return
     }
@@ -208,7 +217,11 @@ export function IgniteDateFlow({
               animate={{ opacity: 1 }}
               className="mx-auto flex min-h-[72vh] flex-col items-center justify-center text-center"
             >
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: showFlame ? 1 : 0 }} transition={{ duration: 0.5, ease: "easeInOut" }}>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: showBonfire || showFlame ? 1 : 0 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+              >
                 <BonfireSvg sparkActive={showFlame} bonfireVisible={showBonfire} breathing={bonfireBreathing} />
               </motion.div>
 
@@ -230,28 +243,27 @@ export function IgniteDateFlow({
                 <div className="my-3 h-px w-full bg-white/10" />
                 <p className="text-sm leading-relaxed text-white/70">{taskText}</p>
 
-                {!myResponse ? (
+                {!iSubmittedMyResponse ? (
                   <div className="mt-4">
                     <textarea
                       value={responseText}
-                      onChange={(e) => setResponseText(e.target.value.slice(0, 200))}
+                      onChange={(e) => setResponseText(e.target.value)}
                       placeholder="your answer..."
                       className="min-h-[92px] w-full resize-none rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-amber-400/40"
                     />
-                    <div className="mt-1 text-right text-[11px] text-white/30">{responseText.length}/200</div>
                     <button
                       type="button"
                       onClick={async () => {
-                        if (responseText.trim().length < 20 || submitting) return
+                        if (submitting) return
                         setSubmitting(true)
-                        const result = await onSubmitResponse(responseText.trim())
+                        const result = await onSubmitResponse(responseText)
                         setSubmitting(false)
                         // Async flow: return user back to chat immediately unless both are done right now.
                         if (!result.bothAnswered) {
                           onClose()
                         }
                       }}
-                      disabled={responseText.trim().length < 20 || submitting}
+                      disabled={submitting}
                       className="mt-3 h-11 w-full rounded-xl bg-amber-400 text-sm font-medium text-black disabled:cursor-not-allowed disabled:opacity-45"
                     >
                       submit
@@ -277,7 +289,7 @@ export function IgniteDateFlow({
                 }}
                 className="mt-5 rounded-full bg-white/90 px-6 py-2.5 text-sm font-semibold text-black transition hover:bg-white"
               >
-                continue to chat
+                {!iSubmittedMyResponse ? "Answer later" : "Continue to chat"}
               </motion.button>
             </motion.div>
           </>
@@ -300,7 +312,7 @@ export function IgniteDateFlow({
                 <img src={me.avatar_url ?? ""} alt={me.display_name ?? "you"} className="h-10 w-10 rounded-full object-cover" />
                 <div className="text-[13px] text-white/60">{me.display_name ?? "you"}</div>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-white">{myResponse}</p>
+              <p className="mt-3 text-sm leading-relaxed text-white">{myResponse ?? ""}</p>
             </motion.div>
 
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.45, delay: 0.45, ease: "easeInOut" }} className="mt-3 w-full max-w-[340px] rounded-2xl border border-white/10 bg-[#161616] p-4 text-left">
@@ -308,7 +320,7 @@ export function IgniteDateFlow({
                 <img src={other.avatar_url ?? ""} alt={other.display_name ?? "them"} className="h-10 w-10 rounded-full object-cover" />
                 <div className="text-[13px] text-white/60">{other.display_name ?? "them"}</div>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-white">{theirResponse}</p>
+              <p className="mt-3 text-sm leading-relaxed text-white">{theirResponse ?? ""}</p>
             </motion.div>
 
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35, delay: 0.7, ease: "easeInOut" }} className="mt-4 text-[11px] text-white/30">
@@ -355,7 +367,7 @@ export function IgniteConfirmSheet({
         <>
           <motion.button
             type="button"
-            className="fixed inset-0 z-[108] bg-black/60"
+            className="fixed inset-0 z-[108] bg-black/65 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -363,27 +375,59 @@ export function IgniteConfirmSheet({
             onClick={onClose}
           />
           <motion.div
-            className="fixed inset-x-0 bottom-0 z-[109] mx-auto w-full max-w-[390px] rounded-t-[24px] bg-[#111] px-5 pb-6 pt-3"
+            style={{ fontFamily: IGNITE_UI_FONT }}
+            className="fixed inset-x-0 bottom-0 z-[109] mx-auto w-full max-w-[390px] overflow-hidden rounded-t-[28px] border border-white/[0.08] border-b-0 bg-[#0c0c0f]/98 px-6 pt-2 shadow-[0_-24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl pb-[max(1.75rem,env(safe-area-inset-bottom))]"
             initial={{ opacity: 0, y: "100%" }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: "100%" }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
+            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-white/20" />
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/25 to-transparent"
+              aria-hidden
+            />
+            <div className="mx-auto mb-5 h-1 w-11 rounded-full bg-white/[0.14]" />
+
             <div className="flex flex-col items-center text-center">
-              <div className="rounded-full border border-amber-400/30 p-[2px]">
-                <img src={avatarUrl ?? ""} alt={name} className="h-12 w-12 rounded-full object-cover" />
+              <div className="relative">
+                <div
+                  className="absolute -inset-1 rounded-full bg-gradient-to-br from-amber-400/35 via-amber-500/10 to-transparent opacity-80 blur-md"
+                  aria-hidden
+                />
+                <div className="relative rounded-full bg-gradient-to-br from-amber-300/50 to-amber-600/20 p-[2.5px] shadow-[0_0_0_1px_rgba(251,191,36,0.12)]">
+                  <img
+                    src={avatarUrl ?? ""}
+                    alt={name}
+                    className="h-[4.5rem] w-[4.5rem] rounded-full object-cover ring-2 ring-black/40"
+                  />
+                </div>
               </div>
-              <div className="mt-3 text-[18px] font-medium text-white">{name}</div>
-              <div className="mt-1 text-[13px] text-white/40">ask them out?</div>
+
+              <p className="mt-5 text-[10px] font-medium uppercase tracking-[0.22em] text-white/45">
+                Ignite a date
+              </p>
+              <h2 className="mt-2 text-[1.375rem] font-semibold leading-tight tracking-[-0.02em] text-white">
+                {name}
+              </h2>
+              <p className="mt-2 max-w-[260px] text-[13px] font-normal leading-relaxed text-white/50">
+                Send a thoughtful invite. They&apos;ll need to accept before you plan together.
+              </p>
             </div>
 
-            <div className="mt-6 space-y-3">
-              <button type="button" onClick={onIgnite} className="h-12 w-full rounded-xl bg-amber-400 text-sm font-medium text-black">
-                ignite
+            <div className="mt-8 flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={onIgnite}
+                className="h-[3.25rem] w-full rounded-2xl bg-gradient-to-b from-amber-300 to-amber-500 text-[15px] font-semibold tracking-wide text-neutral-950 shadow-[0_8px_28px_rgba(251,191,36,0.22)] transition-[filter,transform] duration-200 hover:brightness-[1.03] active:scale-[0.99]"
+              >
+                Ignite the flame
               </button>
-              <button type="button" onClick={onClose} className="h-12 w-full rounded-xl border border-white/15 bg-transparent text-sm text-white/40">
-                not yet
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-12 w-full rounded-2xl border border-white/[0.12] bg-white/[0.03] text-[14px] font-medium tracking-wide text-white/55 transition-colors duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:text-white/75"
+              >
+                Not yet
               </button>
             </div>
           </motion.div>
