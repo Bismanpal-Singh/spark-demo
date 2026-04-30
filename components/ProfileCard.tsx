@@ -257,27 +257,3 @@ export function ProfileCard({
     </div>
   )
 }
-
-interface ActionButtonsProps {
-  onSwipeLeft: () => void
-  onSwipeRight: () => void
-}
-
-export function ActionButtons({ onSwipeLeft, onSwipeRight }: ActionButtonsProps) {
-  return (
-    <div className="flex items-center justify-center gap-5">
-      <button
-        onClick={onSwipeLeft}
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-white shadow-lg backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
-      >
-        <X className="h-5 w-5" />
-      </button>
-      <button
-        onClick={onSwipeRight}
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-white shadow-lg backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
-      >
-        <Heart className="h-5 w-5" fill="currentColor" />
-      </button>
-    </div>
-  )
-}

@@ -97,7 +97,6 @@ export function ChatConversation({
     Array<{ id: string; sender: "me" | "them"; text: string; timestamp: string }>
   >([])
   const [error, setError] = useState<string | null>(null)
-  const unlocked = true
   const [dateRequest, setDateRequest] = useState<DateRequestRow | null>(null)
   const [taskRow, setTaskRow] = useState<FrictionTaskRow | null>(null)
   const [showIgniteSheet, setShowIgniteSheet] = useState(false)
@@ -530,7 +529,7 @@ export function ChatConversation({
 
   const sendMessage = async () => {
     const trimmed = newMessage.trim()
-    if (!trimmed || !unlocked) return
+    if (!trimmed) return
     setNewMessage("")
     try {
       const payload = {

@@ -109,9 +109,6 @@ export function ChatView({
           const bothAnswered = Boolean(a) && Boolean(b)
           if (!bothAnswered) return false
 
-          // Show chat row as soon as spark is complete for both users.
-          // Keep selected-match passthrough for immediate post-flow navigation.
-          if (selectedMatchId && m.id === selectedMatchId) return true
           return true
         })
         .map((m) => {
